@@ -12,7 +12,7 @@ A mesh gradient drawing tool that runs in the browser. Everything lives in one f
 - **Multiple frames** on a zoomable, pannable canvas, with rename, duplicate and delete.
 - **12 starter scenes.**
 - **Reference images:** trace over them, pick colors or a palette from them, or turn one into a grid mesh.
-- **Export** to PNG, JPG, PDF, SVG, CSS or HTML, for one frame, a chosen set or all frames.
+- **Export** to PNG, JPG, PDF, SVG, CSS, HTML, GIF or MP4 (animated distortions), for one frame, a chosen set or all frames.
 - **Light and dark mode** (dark by default) and liquid-glass panels.
 
 ## Running it
@@ -27,12 +27,16 @@ Then open http://localhost:8000/meshdraw.html.
 
 The file is written as a page fragment with no `<!doctype>` wrapper, so the hosted viewer can add its own. Browsers render it as it is.
 
-## Demo video
+## Demo film
 
-`demo/` records a 40-second walkthrough that builds a radial "Bloom" artwork. It drives the real app in headless Chrome, adds a cursor and captions, and encodes an MP4. Edit the captions, order or speed of each scene in `demo/script.js`, then run:
+`demo/` records "Gradients have a personality", a roughly 40-second film. It opens on a painter's hand blending a sunset, wipes into Meshdraw, rebuilds the same sky as a mesh, and runs a montage of trending looks. It drives the real app in headless Chrome, draws the supers, cursor and transitions in the page, and encodes an MP4.
+
+- `demo/script.js`: the storyboard. Edit supers, order and speeds here.
+- `demo/looks.js`: the gradient looks used in the film.
+- `demo/assets/painter.mp4`: the opening painter shot (AI-generated, not committed). Add your own clip at this path.
 
 ```bash
 cd demo && npm install && node record.js
 ```
 
-This needs Google Chrome and ffmpeg. The video is written to `demo/meshdraw-demo.mp4`.
+This needs Google Chrome and ffmpeg. The film is written to `demo/meshdraw-demo.mp4`.

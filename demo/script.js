@@ -1,136 +1,157 @@
-// Storyboard for the Meshdraw demo video. Each scene has a caption, a playback speed and the actions to perform.
-// Edit captions, order or speeds here and run record.js again to re-render.
+// Storyboard for the Meshdraw film "Gradients have a personality".
+// Each scene has a name, a playback speed and the actions to perform. Edit the supers, order or speeds here and run
+// record.js again to re-render. The painter shot is assets/painter.mp4 (generated with Gemini).
+const LOOKS = require('./looks.js');
 
-// The "Bloom" artwork: a vertical strip of colors that the Circular distortion wraps into a radial burst.
-// u runs across the frame (0 left, 1 right) and becomes the angle; v runs down (0 top, 1 bottom) and becomes the distance from the center.
-const POINTS = [
-  { u: 0.5, v: 0.04, hex: '#F1F2D8', spread: 0.5, stretch: 8, angle: 0 },
-  { u: 0.12, v: 0.04, hex: '#F1F2D8', spread: 0.35 },
-  { u: 0.88, v: 0.04, hex: '#F1F2D8', spread: 0.35 },
-  { u: 0.5, v: 0.22, hex: '#3B060A', spread: 0.3, stretch: 3.5, angle: 90 },
-  { u: 0.004, v: 0.26, hex: '#1DB2F2', spread: 0.26, stretch: 3.5, angle: 90 },
-  { u: 0.996, v: 0.26, hex: '#1DB2F2', spread: 0.26, stretch: 3.5, angle: 90 },
-  { u: 0.25, v: 0.28, hex: '#F7D7D5', spread: 0.4 },
-  { u: 0.75, v: 0.28, hex: '#F7D7D5', spread: 0.4 },
-  { u: 0.5, v: 0.48, hex: '#F7D7D5', spread: 0.5 },
-  { u: 0.004, v: 0.5, hex: '#F7D7D5', spread: 0.4 },
-  { u: 0.996, v: 0.5, hex: '#F7D7D5', spread: 0.4 },
-  { u: 0.25, v: 0.72, hex: '#1DB2F2', spread: 0.5 },
-  { u: 0.75, v: 0.72, hex: '#1DB2F2', spread: 0.5 },
-  { u: 0.5, v: 0.84, hex: '#1DB2F2', spread: 0.5 },
-  { u: 0.004, v: 0.64, hex: '#5A0B10', spread: 0.12, stretch: 4, angle: 90 },
-  { u: 0.996, v: 0.64, hex: '#5A0B10', spread: 0.12, stretch: 4, angle: 90 },
-  { u: 0.5, v: 0.996, hex: '#2E0306', spread: 0.35, stretch: 4, angle: 0 },
-  { u: 0.1, v: 0.996, hex: '#2E0306', spread: 0.3 },
+const BASE_LOOK = { mode: 'freeform', bg: '#0A3FD6', power: 3.2, blur: 0, bands: 0, grain: 0.05, distort: 'none', amount: 0.5, scale: 0.5, flow: false, canvas: 'landscape', cw: 1920, ch: 1080 };
+const frame = (L, empty) => ({ name: L.name, look: { ...BASE_LOOK, ...L.look }, presetKey: 'glacier', customPalette: null, stops: empty ? [] : L.stops, grid: null, warp: null });
+
+// The first frame starts empty and the golden-hour sky is drawn into it live; the rest are ready for the montage.
+const SKY = LOOKS[0];
+const MONTAGE = [
+  { name: 'Liquid chrome', spec: 'Liquid · amount 100% · animated', colors: ['#F7F8FA', '#5E6573', '#0A0A0C'] },
+  { name: 'Fluted glass', spec: 'Fluted · 15 ribs · animated', colors: ['#FF9E7A', '#B79CFF', '#6FC3FF', '#9FF0C8'] },
+  { name: 'Bloom', spec: 'Circular · 4 segments · twist 32%', colors: ['#F1F2D8', '#1DB2F2', '#D8262A', '#3B060A'] },
+  { name: 'Lollipop', spec: 'Swirl · amount 85%', colors: ['#FF4FA3', '#FFD23F', '#3EC6FF', '#7B61FF'] },
+  { name: 'Neon dusk', spec: 'Ripple · grain 58%', colors: ['#3A0CA3', '#FF2E88', '#FFB347', '#00E5FF'] },
+  { name: 'Aurora', spec: 'Liquid · blur 6% · animated', colors: ['#1DE9B6', '#64FFDA', '#7C4DFF', '#040814'] },
 ];
 
-module.exports = [
-  {
-    caption: 'Meshdraw — draw with mesh gradients',
-    speed: 1,
-    run: async (d) => { await d.move(960, 560, 900); await d.wait(1500); },
-  },
-  {
-    caption: 'Add a frame and start from scratch',
-    speed: 1.6,
-    run: async (d) => {
-      await d.clickEl('#addFrameBtn');
-      await d.wait(900);
-      await d.clickText('#inspector summary', 'Starter scenes');
-      await d.wait(500);
-      await d.clickEl('#clearBtn');
-      await d.wait(400);
-      const r = d.frameRect();
-      await d.dblclick(r.x + 18, r.y - 13);
-      await d.wait(250);
-      await d.type('Bloom');
-      await d.key('Enter');
-      await d.wait(500);
+module.exports = {
+  clip: 'assets/painter.mp4',
+  audio: { until: 6.6, fade: 1.1, gain: 4 },
+  seed: { frames: [frame(SKY, true), ...LOOKS.slice(1).map((L) => frame(L))], active: 0, panelOpen: true, newColor: '#F2A541', app: {} },
+  scenes: [
+    {
+      name: 'The painter',
+      speed: 1,
+      run: async (d) => {
+        await d.dm('cursor', false);
+        await d.clip();
+        await d.wait(900);
+        await d.dm('serif', 'For centuries, the gradient lived on the brush.');
+        await d.wait(4500);
+      },
     },
-  },
-  {
-    caption: 'Drop color points, then stretch and turn them',
-    badge: '8× speed',
-    speed: 8,
-    run: async (d) => {
-      await d.clickText('#inspector summary', 'Mesh');
-      await d.wait(300);
-      await d.slider('#power', 5);
-      for (const p of POINTS) {
-        await d.key('Escape');
-        await d.dblclick(...d.at(p.u, p.v));
+    {
+      name: 'The flip',
+      speed: 1,
+      run: async (d) => {
+        await d.dm('wipe');
+        await d.wait(700);
+        await d.dm('big', ['Then the canvas changed.'], 'fluid', { scrim: true });
+        await d.wait(1500);
+        await d.dm('clear', 'big');
+        const [x, y] = d.at(0.08, 0.72);
+        await d.jump(x, y);
+        await d.dm('morph', x, y);
+        await d.dm('caption', 'The brush became a cursor.');
+        await d.wait(1500);
+      },
+    },
+    {
+      name: 'The stroke continues',
+      speed: 1.6,
+      run: async (d) => {
+        await d.clickEl('.tool[data-tool="pencil"]');
         await d.wait(150);
-        await d.setHex(p.hex);
-        await d.slider('#selSpread', p.spread);
-        if (p.stretch) { await d.slider('#selStretch', p.stretch); await d.slider('#selAngle', p.angle); }
-      }
-      await d.key('Escape');
-      await d.wait(400);
+        const pts = [];
+        for (let i = 0; i <= 30; i++) { const t = i / 30; pts.push(d.at(0.08 + 0.84 * t, 0.72 - 0.12 * Math.sin(t * Math.PI))); }
+        await d.drag(pts, 1300);
+        await d.wait(250);
+        await d.slider('#selSpread', 0.3);
+        await d.key('v');
+      },
     },
-  },
-  {
-    caption: 'Sketch a path with the pencil',
-    speed: 2,
-    run: async (d) => {
-      await d.setHex('#D8262A');
-      await d.clickEl('.tool[data-tool="pencil"]');
-      await d.wait(300);
-      const pts = [];
-      for (let i = 0; i <= 24; i++) { const t = i / 24; pts.push(d.at(0.25 + 0.03 * Math.sin(t * Math.PI * 1.5), 0.26 + 0.6 * t)); }
-      await d.drag(pts, 1100);
-      await d.wait(300);
-      await d.slider('#selSpread', 0.11);
-      await d.key('v');
-      await d.wait(500);
+    {
+      name: 'The blend became a mesh',
+      speed: 10,
+      run: async (d) => {
+        await d.dm('caption', 'The blend became a mesh.', '10× speed');
+        for (const p of SKY.stops) {
+          await d.key('Escape');
+          await d.dblclick(...d.at(p.x, p.y));
+          await d.wait(150);
+          await d.setHex(p.color);
+          await d.slider('#selSpread', p.spread);
+          const stretch = Math.hypot(p.hx, p.hy) / 0.06;
+          if (stretch > 1.05) await d.slider('#selStretch', stretch);
+        }
+        await d.key('Escape');
+        await d.wait(500);
+      },
     },
-  },
-  {
-    caption: 'Distort → Circular wraps the strip into a bloom',
-    speed: 1,
-    run: async (d) => {
-      await d.key('Escape');
-      await d.clickText('#inspector summary', 'Effects');
-      await d.wait(500);
-      await d.clickText('#distorts button', 'Circular');
-      await d.wait(1600);
+    {
+      name: 'Block vs gradient',
+      speed: 1.25,
+      run: async (d) => {
+        await d.dm('caption', '');
+        await d.key('h');
+        await d.clickText('#inspector summary', 'Effects');
+        await d.wait(300);
+        await d.slider('#bands', 4, { drag: true, ms: 500 });
+        await d.dm('big', ['A colour block is', 'edgy. solid. loud.'], 'hard', { lineGap: 350 });
+        await d.wait(1800);
+        await d.dm('clear', 'big');
+        await d.slider('#bands', 0, { drag: true, ms: 750 });
+        await d.dm('big', ['A gradient is', 'fluid. easy.'], 'fluid', { lineGap: 420, grad: 1 });
+        await d.wait(1650);
+        await d.dm('big', ['It speaks tech.'], 'fluid', { scrim: true });
+        await d.wait(1250);
+        await d.dm('clear', 'big');
+      },
     },
-  },
-  {
-    caption: 'Twist it, then add blur and grain',
-    speed: 1.6,
-    run: async (d) => {
-      await d.slider('#amount', 0.05, { drag: true, ms: 900 });
-      await d.slider('#amount', 0.32, { drag: true, ms: 900 });
-      await d.slider('#blur', 0.05);
-      await d.slider('#grain', 0.1);
-      await d.wait(700);
+    {
+      name: 'Go wild',
+      speed: 1,
+      run: async (d) => {
+        await d.dm('cursor', false);
+        await d.key('\\');
+        await d.dm('big', ['Now give it a personality.'], 'fluid', { scrim: true });
+        await d.wait(1300);
+        await d.dm('clear', 'big');
+        for (const m of MONTAGE) {
+          await d.key('PageDown');
+          await d.dm('chip', m.name, m.spec, m.colors);
+          await d.wait(1250);
+        }
+        await d.dm('clear', 'chip');
+      },
     },
-  },
-  {
-    caption: 'Animate it',
-    speed: 1,
-    run: async (d) => { await d.clickEl('#flowBtn'); await d.move(...d.at(0.5, 0.5), 600); await d.wait(1700); },
-  },
-  {
-    caption: 'Light or dark',
-    speed: 1.2,
-    run: async (d) => { await d.clickEl('#themeBtn'); await d.wait(1100); await d.clickEl('#themeBtn'); await d.wait(500); },
-  },
-  {
-    caption: 'Export PNG, JPG, PDF, SVG, CSS or HTML',
-    speed: 1.4,
-    run: async (d) => {
-      await d.clickEl('#exportBtn');
-      await d.wait(1500);
-      await d.clickText('#exportFormat button', 'SVG');
-      await d.wait(1400);
-      await d.key('Escape');
-      await d.wait(300);
+    {
+      name: 'One canvas',
+      speed: 1,
+      run: async (d) => {
+        await d.key('Shift+Digit1');
+        await d.dm('big', ['One canvas. Every mood.'], 'fluid', { scrim: true });
+        await d.wait(2000);
+        await d.dm('clear', 'big');
+      },
     },
-  },
-  {
-    caption: 'One canvas, many frames',
-    speed: 1,
-    run: async (d) => { await d.clickEl('#fitAll'); await d.wait(1800); await d.endCard('Meshdraw', 'Draw with mesh gradients'); await d.wait(1600); },
-  },
-];
+    {
+      name: 'Export',
+      speed: 1.8,
+      run: async (d) => {
+        await d.dm('cursor', true);
+        await d.key('Shift+Digit2');
+        await d.clickEl('#exportBtn');
+        await d.wait(500);
+        await d.clickText('#exportFormat button', 'GIF');
+        await d.dm('caption', 'Export it. Still or in motion.');
+        await d.wait(1700);
+        await d.clickText('#exportFormat button', 'MP4');
+        await d.wait(1300);
+        await d.key('Escape');
+        await d.dm('caption', '');
+      },
+    },
+    {
+      name: 'End card',
+      speed: 1,
+      run: async (d) => {
+        await d.dm('end', 'Gradients have a personality.', 'Give yours one.', 'Meshdraw');
+        await d.wait(3600);
+      },
+    },
+  ],
+};

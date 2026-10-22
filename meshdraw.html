@@ -294,7 +294,8 @@ kbd{display:inline-block;min-width:18px;padding:2px 5px;border-radius:5px;backgr
 .pick-list input{width:15px;height:15px;margin:0;accent-color:var(--accent);flex:none}
 .pick-list .fi-name{flex:1}
 .pick-list .pick-all{color:var(--ink-2);font-weight:500;border-bottom:1px solid var(--line);border-radius:7px 7px 0 0;margin-bottom:2px}
-.fmt-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.fmt-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+#motionPrev{display:block;width:100%;height:auto;max-height:30vh;object-fit:contain}
 .fmt-grid button{display:flex;flex-direction:column;align-items:flex-start;gap:1px;padding:7px 10px;border-radius:10px;border:1px solid var(--line);background:var(--fill);cursor:pointer;text-align:left}
 .fmt-grid button b{font-size:12.5px;font-weight:600}
 .fmt-grid button span{font-size:10.5px;color:var(--ink-3)}
@@ -642,6 +643,14 @@ kbd{display:inline-block;min-width:18px;padding:2px 5px;border-radius:5px;backgr
       <div class="fmt-grid" id="exportFormat" role="group" aria-label="File format"></div>
       <p class="note" id="fmtNote"></p>
     </div>
+    <div class="field" id="motionRow" hidden>
+      <span class="lbl">Length</span>
+      <div class="seg" id="exportLen" role="group" aria-label="Animation length">
+        <button type="button" data-len="2" aria-pressed="false">2 s</button>
+        <button type="button" data-len="4" aria-pressed="true">4 s</button>
+        <button type="button" data-len="6" aria-pressed="false">6 s</button>
+      </div>
+    </div>
     <div class="field" id="exportSizeRow">
       <span class="lbl">Size</span>
       <div class="seg" id="exportScale" role="group" aria-label="Export size">
@@ -650,7 +659,7 @@ kbd{display:inline-block;min-width:18px;padding:2px 5px;border-radius:5px;backgr
         <button type="button" data-scale="3" aria-pressed="false">3×</button>
       </div>
     </div>
-    <figure class="export-fig"><img id="exportImg" alt="Export preview" hidden><span id="exportWait">Rendering…</span></figure>
+    <figure class="export-fig"><img id="exportImg" alt="Export preview" hidden><canvas id="motionPrev" aria-label="Animation preview" hidden></canvas><span id="exportWait">Rendering…</span></figure>
     <textarea class="code" id="codeOut" readonly hidden aria-label="Generated code"></textarea>
     <div class="field">
       <label for="exportName">File name</label>
@@ -730,6 +739,8 @@ const FORMATS = {
   svg: { name: 'SVG', sub: 'Vector', ext: 'svg' },
   css: { name: 'CSS', sub: 'Code', ext: 'css' },
   html: { name: 'HTML', sub: 'Web page', ext: 'html' },
+  gif: { name: 'GIF', sub: 'Animation', ext: 'gif', motion: true },
+  mp4: { name: 'MP4', sub: 'Video', ext: 'mp4', motion: true },
 };
 
 let AW = 1, AH = 1, BX = 0, BY = 0;  // window size and the selected frame's top-left on screen (CSS px)
@@ -3534,7 +3545,7 @@ const ui = {};
  'brush', 'brushOut', 'strength', 'strengthOut', 'resetWarp', 'presets', 'scenesMeta', 'clearBtn', 'keys', 'count', 'hint', 'hintWrap', 'toast', 'tools',
  'zoomOut', 'zoomIn', 'zoomVal', 'fitAll', 'exportBtn', 'collapseBtn', 'themeBtn',
  'newColor', 'undoBtn', 'redoBtn', 'eyeBtn', 'refBtn', 'panelToggle', 'inspector', 'coach', 'coachTitle', 'coachKey', 'coachBody', 'coachOk', 'coachSkip', 'tip',
- 'exportPop', 'exportClose', 'framesPop', 'framesClose', 'exportScope', 'scopeAll', 'scopePick', 'exportPick', 'addFrameBtn', 'delFrameBtn', 'exportFormat', 'fmtNote', 'exportSizeRow', 'exportScale', 'exportImg', 'exportWait', 'codeOut',
+ 'exportPop', 'exportClose', 'framesPop', 'framesClose', 'exportScope', 'scopeAll', 'scopePick', 'exportPick', 'addFrameBtn', 'delFrameBtn', 'exportFormat', 'fmtNote', 'exportSizeRow', 'exportScale', 'motionRow', 'exportLen', 'motionPrev', 'exportImg', 'exportWait', 'codeOut',
  'exportName', 'exportDims', 'exportHow', 'dlBtn', 'copyBtn'].forEach((id) => (ui[id] = document.getElementById(id)));
 
 function fill(el) { el.style.setProperty('--p', ((el.value - el.min) / (el.max - el.min)) * 100 + '%'); }
@@ -4229,7 +4240,7 @@ ui.newColor.addEventListener('input', () => {
 ui.keys.innerHTML = [
   ['V', 'Select and edit'], ['P', 'Pen'], ['B', 'Pencil'], ['S', 'Smudge'], ['H', 'Hide points and handles'], ['I', 'Pick a color from the reference'],
   ['Space drag', 'Pan the canvas'], [`${MOD} scroll`, 'Zoom'], ['Shift 1', 'Show all frames'], ['Shift 2', 'Zoom to the frame'], [`${MOD} 0`, 'Zoom to 100%'],
-  ['\\', 'Hide or show settings'], ['Enter', 'Finish a pen path'], [`${ALT} click`, 'Add an anchor to a path'], [`${ALT} drag`, 'Move one handle on its own'],
+  ['\\', 'Hide or show settings'], ['PgDn PgUp', 'Next or previous frame'], ['Enter', 'Finish a pen path'], [`${ALT} click`, 'Add an anchor to a path'], [`${ALT} drag`, 'Move one handle on its own'],
   ['Shift drag', 'Snap to 15° (45° with the pen)'], ['Delete', 'Remove the selection'], [`${MOD} D`, 'Duplicate'], [`${MOD} Z`, 'Undo'], [`${MOD} E`, 'Export'], ['[ ]', 'Smudge brush size'],
 ].map(([k, v]) => `<dt>${k.split(' ').map((x) => `<kbd>${x}</kbd>`).join(' ')}</dt><dd>${v}</dd>`).join('');
 
@@ -4267,6 +4278,7 @@ window.addEventListener('keydown', (e) => {
     case 's': case 'S': setTool('smudge'); break;
     case 'h': case 'H': toggleHandles(); break;
     case '\\': setPanel(!panelOpen); break;
+    case 'PageDown': case 'PageUp': e.preventDefault(); if (frames.length > 1) activateFrame((active + (e.key === 'PageDown' ? 1 : frames.length - 1)) % frames.length, true); break;
     case 'i': case 'I': if (refImg) setPicking(!picking); else toast('Add a reference image first, under Reference.'); break;
     case 'Escape':
       if (picking) setPicking(false);
@@ -4360,6 +4372,187 @@ async function frameImage(fr, scale, type) {
   const [w, h] = exportSize(fr, scale);
   const cv = pixelsToCanvas(framePixels(fr, w, h), w, h);
   return { blob: await canvasBlob(cv, type, 0.92), w, h };
+}
+// Motion exports step the animation clock frame by frame, so GIF and MP4 come out smooth whatever the machine speed.
+const MOTION = {
+  gif: { fps: 15, sizes: [480, 720, 960] },
+  mp4: { fps: 30, sizes: [1280, 1920, 2560] },
+};
+let exportLen = 4;
+const canMove = (fr) => (fr === frames[active] ? settings : fr.look).distort !== 'none';
+function motionSize(fr) {
+  const [nw, nh] = frameSize(fr), long = MOTION[exportFmt].sizes[exportScale - 1];
+  const k = Math.min(1, 4096 / long) * long / Math.max(nw, nh);
+  const even = (v) => Math.max(2, Math.round(v / 2) * 2);
+  return [even(nw * k), even(nh * k)];
+}
+async function eachMotionFrame(fr, w, h, n, fps, onFrame) {
+  const keep = flowTime;
+  try {
+    for (let i = 0; i < n; i++) {
+      flowTime = keep + i / fps;
+      await onFrame(framePixels(fr, w, h), i);
+      if (i % 4 === 3) await new Promise((r) => setTimeout(r, 0));
+    }
+  } finally { flowTime = keep; }
+}
+// GIF: one global 256-colour palette (median cut over sample frames), light ordered dither, LZW compression.
+function medianCut(samples, count) {
+  let boxes = [samples];
+  const range = (b, c) => { let lo = 255, hi = 0; for (let i = c; i < b.length; i += 3) { if (b[i] < lo) lo = b[i]; if (b[i] > hi) hi = b[i]; } return hi - lo; };
+  while (boxes.length < count) {
+    let bi = -1, bc = 0, br = -1;
+    boxes.forEach((b, i) => { if (b.length < 6) return; for (let c = 0; c < 3; c++) { const r = range(b, c); if (r > br) { br = r; bi = i; bc = c; } } });
+    if (bi < 0 || br <= 0) break;
+    const b = boxes[bi], n = b.length / 3, idx = new Uint32Array(n);
+    for (let i = 0; i < n; i++) idx[i] = i;
+    idx.sort((p, q) => b[p * 3 + bc] - b[q * 3 + bc]);
+    const half = n >> 1, lo = new Uint8Array(half * 3), hi = new Uint8Array((n - half) * 3);
+    for (let i = 0; i < n; i++) { const dst = i < half ? lo : hi, o = (i < half ? i : i - half) * 3, s = idx[i] * 3; dst[o] = b[s]; dst[o + 1] = b[s + 1]; dst[o + 2] = b[s + 2]; }
+    boxes.splice(bi, 1, lo, hi);
+  }
+  const pal = new Uint8Array(768);
+  boxes.forEach((b, i) => { const n = b.length / 3; let r = 0, g = 0, bl = 0; for (let k = 0; k < b.length; k += 3) { r += b[k]; g += b[k + 1]; bl += b[k + 2]; } pal[i * 3] = r / n; pal[i * 3 + 1] = g / n; pal[i * 3 + 2] = bl / n; });
+  return pal;
+}
+function gifWriter(w, h, palette, delayCs) {
+  const chunks = [], bytes = (arr) => chunks.push(Uint8Array.from(arr)), u16 = (v) => [v & 255, (v >> 8) & 255];
+  bytes([...'GIF89a'].map((c) => c.charCodeAt(0)).concat(u16(w), u16(h), [0xf7, 0, 0]));
+  chunks.push(palette);
+  bytes([0x21, 0xff, 0x0b, ...[...'NETSCAPE2.0'].map((c) => c.charCodeAt(0)), 3, 1, 0, 0, 0]);
+  const nearest = new Int16Array(32768).fill(-1);
+  const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
+  const lookup = (r, g, b) => {
+    const key = ((r >> 3) << 10) | ((g >> 3) << 5) | (b >> 3);
+    let v = nearest[key];
+    if (v < 0) {
+      let bd = Infinity;
+      for (let i = 0; i < 256; i++) { const dr = palette[i * 3] - r, dg = palette[i * 3 + 1] - g, db = palette[i * 3 + 2] - b, d = dr * dr + dg * dg + db * db; if (d < bd) { bd = d; v = i; } }
+      nearest[key] = v;
+    }
+    return v;
+  };
+  return {
+    frame(px) {
+      const idx = new Uint8Array(w * h);
+      for (let y = 0, p = 0; y < h; y++) for (let x = 0; x < w; x++, p++) {
+        const t = (BAYER[(y & 3) * 4 + (x & 3)] - 7.5) * 0.9, o = p * 4;
+        idx[p] = lookup(clamp(px[o] + t, 0, 255), clamp(px[o + 1] + t, 0, 255), clamp(px[o + 2] + t, 0, 255));
+      }
+      bytes([0x21, 0xf9, 4, 0, ...u16(delayCs), 0, 0, 0x2c, 0, 0, 0, 0, ...u16(w), ...u16(h), 0]);
+      chunks.push(lzw(idx));
+    },
+    blob() { bytes([0x3b]); return new Blob(chunks, { type: 'image/gif' }); },
+  };
+}
+// GIF LZW (variable-length codes up to 12 bits, hashed string table), packed into 255-byte sub-blocks.
+function lzw(pixels) {
+  const out = [], block = new Uint8Array(256);
+  let blen = 0;
+  const byte = (b) => { block[++blen] = b; if (blen === 255) { block[0] = 255; out.push(block.slice(0, 256)); blen = 0; } };
+  const BITS = 12, HSIZE = 5003, MAXMAX = 1 << BITS, CLEAR = 256, EOI = 257;
+  const htab = new Int32Array(HSIZE).fill(-1), codetab = new Int32Array(HSIZE);
+  let nBits = 9, maxcode = (1 << nBits) - 1, freeEnt = CLEAR + 2, clearFlg = false, acc = 0, accBits = 0;
+  const output = (code) => {
+    acc |= code << accBits; accBits += nBits;
+    while (accBits >= 8) { byte(acc & 255); acc >>>= 8; accBits -= 8; }
+    if (freeEnt > maxcode || clearFlg) {
+      if (clearFlg) { nBits = 9; maxcode = (1 << nBits) - 1; clearFlg = false; }
+      else { nBits++; maxcode = nBits === BITS ? MAXMAX : (1 << nBits) - 1; }
+    }
+    if (code === EOI) { while (accBits > 0) { byte(acc & 255); acc >>>= 8; accBits -= 8; } accBits = 0; }
+  };
+  output(CLEAR);
+  let ent = pixels[0];
+  outer: for (let p = 1; p < pixels.length; p++) {
+    const c = pixels[p], fcode = (c << BITS) + ent;
+    let i = (c << 4) ^ ent;
+    if (htab[i] === fcode) { ent = codetab[i]; continue; }
+    if (htab[i] >= 0) {
+      const disp = i === 0 ? 1 : HSIZE - i;
+      do { if ((i -= disp) < 0) i += HSIZE; if (htab[i] === fcode) { ent = codetab[i]; continue outer; } } while (htab[i] >= 0);
+    }
+    output(ent); ent = c;
+    if (freeEnt < MAXMAX) { codetab[i] = freeEnt++; htab[i] = fcode; }
+    else { htab.fill(-1); freeEnt = CLEAR + 2; clearFlg = true; output(CLEAR); }
+  }
+  output(ent); output(EOI);
+  const parts = [new Uint8Array([8])];
+  for (const b of out) parts.push(b);
+  if (blen) { block[0] = blen; parts.push(block.slice(0, blen + 1)); }
+  parts.push(new Uint8Array([0]));
+  let n = 0; parts.forEach((p) => (n += p.length));
+  const all = new Uint8Array(n); n = 0; parts.forEach((p) => { all.set(p, n); n += p.length; });
+  return all;
+}
+async function encodeGif(fr, progress) {
+  const [w, h] = motionSize(fr), { fps } = MOTION.gif, n = exportLen * fps;
+  const keep = flowTime, sample = [];
+  for (const k of [0, 0.25, 0.5, 0.75]) {
+    flowTime = keep + k * exportLen;
+    const px = framePixels(fr, w, h), step = Math.max(1, Math.floor((w * h) / 6000));
+    for (let p = 0; p < w * h; p += step) sample.push(px[p * 4], px[p * 4 + 1], px[p * 4 + 2]);
+  }
+  flowTime = keep;
+  const gif = gifWriter(w, h, medianCut(Uint8Array.from(sample), 256), Math.round(100 / fps));
+  await eachMotionFrame(fr, w, h, n, fps, (px, i) => { gif.frame(px); progress(i + 1, n); });
+  return gif.blob();
+}
+// MP4: H.264 through WebCodecs, packed by mp4-muxer (loaded on first use).
+let muxerLoad = null;
+function loadMuxer() {
+  if (window.Mp4Muxer) return Promise.resolve();
+  muxerLoad = muxerLoad || new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/mp4-muxer@5.1.3/build/mp4-muxer.js';
+    s.onload = () => res(); s.onerror = () => { muxerLoad = null; rej(new Error('muxer')); };
+    document.head.appendChild(s);
+  });
+  return muxerLoad;
+}
+const canMp4 = () => typeof window.VideoEncoder === 'function' && typeof window.VideoFrame === 'function';
+async function encodeMp4(fr, progress) {
+  const [w, h] = motionSize(fr), { fps } = MOTION.mp4, n = exportLen * fps;
+  await loadMuxer();
+  const bitrate = Math.round(Math.min(40e6, w * h * fps * 0.2));
+  let codec = null;
+  for (const c of ['avc1.640033', 'avc1.640032', 'avc1.640028', 'avc1.4d0028', 'avc1.42001f']) {
+    try { if ((await VideoEncoder.isConfigSupported({ codec: c, width: w, height: h, bitrate, framerate: fps })).supported) { codec = c; break; } } catch (e) { /* try the next profile */ }
+  }
+  if (!codec) throw new Error('codec');
+  const target = new Mp4Muxer.ArrayBufferTarget();
+  const muxer = new Mp4Muxer.Muxer({ target, video: { codec: 'avc', width: w, height: h }, fastStart: 'in-memory' });
+  let failed = null;
+  const enc = new VideoEncoder({ output: (chunk, meta) => muxer.addVideoChunk(chunk, meta), error: (e) => (failed = e) });
+  enc.configure({ codec, width: w, height: h, bitrate, framerate: fps, avc: { format: 'avc' } });
+  await eachMotionFrame(fr, w, h, n, fps, async (px, i) => {
+    if (failed) throw failed;
+    const vf = new VideoFrame(px, { format: 'RGBA', codedWidth: w, codedHeight: h, timestamp: Math.round((i * 1e6) / fps), duration: Math.round(1e6 / fps) });
+    enc.encode(vf, { keyFrame: i % (fps * 2) === 0 });
+    vf.close();
+    while (enc.encodeQueueSize > 6) await new Promise((r) => setTimeout(r, 4));
+    progress(i + 1, n);
+  });
+  await enc.flush();
+  enc.close();
+  if (failed) throw failed;
+  muxer.finalize();
+  return new Blob([target.buffer], { type: 'video/mp4' });
+}
+// A small looping preview of the motion for the export panel.
+let previewTimer = 0;
+async function motionPreview(fr, job) {
+  const [mw, mh] = motionSize(fr), w = 360, h = Math.max(2, Math.round((360 * mh) / mw)), fps = 12, n = Math.min(48, exportLen * fps);
+  const imgs = [];
+  await eachMotionFrame(fr, w, h, n, fps, (px) => { if (job === exportJob) imgs.push(new ImageData(px, w, h)); });
+  if (job !== exportJob || !imgs.length) return;
+  const cv = ui.motionPrev, cx = cv.getContext('2d');
+  cv.width = w; cv.height = h;
+  let i = 0;
+  clearInterval(previewTimer);
+  previewTimer = setInterval(() => { if (job !== exportJob) { clearInterval(previewTimer); return; } cx.putImageData(imgs[i++ % imgs.length], 0, 0); }, 1000 / fps);
+  cx.putImageData(imgs[0], 0, 0);
+  cv.hidden = false; ui.exportWait.hidden = true;
 }
 function buildPdf(pages) {
   const enc = new TextEncoder(), parts = [], offsets = [];
@@ -4501,6 +4694,8 @@ function fmtNote() {
     svg: 'Vector file redrawn from a dense grid of the frame’s colors. Scales to any size.' + (all ? ' One SVG per frame in a ZIP.' : ''),
     css: 'One CSS class with the gradient embedded as SVG, so it scales cleanly and matches the canvas.' + (all ? ' Every frame gets its own class.' : ''),
     html: 'A complete web page that shows the gradient, scaled to fit the window.' + (all ? ' One page per frame in a ZIP.' : ''),
+    gif: 'A looping animation of the frame’s distortion at 15 fps. Heavy grain and large sizes make bigger files.' + (all ? ' One GIF per frame in a ZIP.' : ''),
+    mp4: 'An H.264 video at 30 fps that plays almost anywhere.' + (all ? ' One video per frame in a ZIP.' : ''),
   }[exportFmt];
 }
 async function refreshExport() {
@@ -4516,17 +4711,42 @@ async function refreshExport() {
   }
   ui.exportWait.textContent = 'Rendering…';
   ui.fmtNote.textContent = fmtNote();
-  ui.exportSizeRow.hidden = !fmt.raster;
-  $$('#exportScale button').forEach((b) => { const [w, h] = exportSize(fr, +b.dataset.scale); b.textContent = `${b.dataset.scale}× · ${w}×${h}`; b.setAttribute('aria-pressed', String(+b.dataset.scale === exportScale)); });
+  ui.exportSizeRow.hidden = !fmt.raster && !fmt.motion;
+  ui.motionRow.hidden = !fmt.motion;
+  $$('#exportLen button').forEach((b) => b.setAttribute('aria-pressed', String(+b.dataset.len === exportLen)));
+  $$('#exportScale button').forEach((b) => {
+    const sc = +b.dataset.scale;
+    if (fmt.motion) { const keep = exportScale; exportScale = sc; const [w, h] = motionSize(fr); exportScale = keep; b.textContent = `${['S', 'M', 'L'][sc - 1]} · ${w}×${h}`; }
+    else { const [w, h] = exportSize(fr, sc); b.textContent = `${sc}× · ${w}×${h}`; }
+    b.setAttribute('aria-pressed', String(sc === exportScale));
+  });
+  clearInterval(previewTimer); ui.motionPrev.hidden = true;
   ui.exportImg.hidden = true; ui.codeOut.hidden = true; ui.exportWait.hidden = false; ui.exportDims.textContent = '';
   ui.dlBtn.disabled = true;
   const many = targets.length > 1;
   const ext = many && exportFmt !== 'pdf' && exportFmt !== 'css' ? 'zip' : fmt.ext;
   ui.exportName.value = many ? `meshdraw-${targets.length}-frames.${ext}` : `${safeName(fr.name)}.${ext}`;
-  ui.copyBtn.hidden = exportFmt === 'jpg' || exportFmt === 'pdf';
+  ui.copyBtn.hidden = exportFmt === 'jpg' || exportFmt === 'pdf' || !!fmt.motion;
   ui.copyBtn.textContent = exportFmt === 'png' ? 'Copy image' : `Copy ${fmt.name}`;
   ui.dlBtn.hidden = exportFmt === 'css' && inViewer;
   ui.exportHow.textContent = exportFmt === 'css' && inViewer ? ' · Copy the CSS into your stylesheet.' : fmt.raster ? ' · Right-click the preview to save it as an image too.' : '';
+  if (fmt.motion) {
+    const movers = targets.filter(canMove), pf = movers.includes(fr) ? fr : movers[0];
+    if (!movers.length || (exportFmt === 'mp4' && !canMp4())) {
+      ui.fmtNote.textContent = movers.length ? 'This browser can’t encode video. Try Chrome, Edge or Safari, or export a GIF.' : 'Nothing moves yet. Add a Distort effect (Effects → Distort) to give this frame motion.';
+      ui.exportWait.textContent = movers.length ? 'Video export isn’t available here' : 'Add a Distort effect to animate';
+      return;
+    }
+    if (movers.length < targets.length) ui.fmtNote.textContent += ` ${targets.length - movers.length} chosen frame${targets.length - movers.length === 1 ? ' has' : 's have'} no Distort effect and will be skipped.`;
+    ui.exportName.value = movers.length > 1 ? `meshdraw-${movers.length}-animations.zip` : `${safeName(pf.name)}.${fmt.ext}`;
+    const [w, h] = motionSize(pf);
+    ui.exportDims.textContent = `${w} × ${h} · ${exportLen} s · ${MOTION[exportFmt].fps} fps${movers.length > 1 ? ` · ${movers.length} frames` : ''}`;
+    await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
+    if (job !== exportJob) return;
+    await motionPreview(pf, job);
+    if (job === exportJob) ui.dlBtn.disabled = false;
+    return;
+  }
   await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
   if (job !== exportJob) return;
   exportText = ''; exportBlob = null;
@@ -4561,6 +4781,19 @@ async function downloadExport() {
   try {
     let blob;
     const many = targets.length > 1, enc = new TextEncoder();
+    if (fmt.motion) {
+      const movers = targets.filter(canMove), encode = exportFmt === 'gif' ? encodeGif : encodeMp4, files = [];
+      for (const [k, f] of movers.entries()) {
+        const b = await encode(f, (i, n) => { ui.dlBtn.textContent = `Rendering ${movers.length > 1 ? `${k + 1}/${movers.length} · ` : ''}${Math.round((i / n) * 100)}%`; });
+        files.push({ name: `${safeName(f.name)}.${fmt.ext}`, data: new Uint8Array(await b.arrayBuffer()), blob: b });
+      }
+      const zip = files.length > 1;
+      blob = zip ? buildZip(dedupeNames(files)) : files[0].blob;
+      const ext = zip ? 'zip' : fmt.ext;
+      if (!name.toLowerCase().endsWith('.' + ext)) name = name.replace(/\.[a-z0-9]+$/i, '') + '.' + ext;
+      await saveFile(name, blob);
+      return;
+    }
     if (exportFmt === 'pdf') {
       const pages = [];
       for (const f of targets) {
@@ -4586,6 +4819,9 @@ async function downloadExport() {
     const ext = many && exportFmt !== 'pdf' && exportFmt !== 'css' ? 'zip' : fmt.ext;
     if (!name.toLowerCase().endsWith('.' + ext)) name = name.replace(/\.[a-z0-9]+$/i, '') + '.' + ext;
     await saveFile(name, blob);
+  } catch (e) {
+    console.error(e);
+    toast(FORMATS[exportFmt].motion ? 'The animation couldn’t be rendered here. Try a smaller size or GIF.' : 'Export failed. Try a smaller size.');
   } finally {
     ui.dlBtn.disabled = false; ui.dlBtn.textContent = 'Download';
   }
@@ -4603,7 +4839,7 @@ function openExport() {
   renderPick();
   refreshExport();
 }
-function closeExport() { ui.exportPop.hidden = true; ui.exportBtn.setAttribute('aria-expanded', 'false'); exportJob++; }
+function closeExport() { clearInterval(previewTimer); ui.exportPop.hidden = true; ui.exportBtn.setAttribute('aria-expanded', 'false'); exportJob++; }
 ui.exportBtn.addEventListener('click', () => (ui.exportPop.hidden ? openExport() : closeExport()));
 ui.exportClose.addEventListener('click', closeExport);
 document.addEventListener('pointerdown', (e) => {
@@ -4617,6 +4853,7 @@ $$('#exportScope button').forEach((b) => b.addEventListener('click', () => {
   renderPick(); refreshExport();
 }));
 $$('#exportScale button').forEach((b) => b.addEventListener('click', () => { exportScale = +b.dataset.scale; refreshExport(); }));
+$$('#exportLen button').forEach((b) => b.addEventListener('click', () => { exportLen = +b.dataset.len; refreshExport(); }));
 ui.dlBtn.addEventListener('click', downloadExport);
 ui.copyBtn.addEventListener('click', () => {
   const blocked = () => toast('Copying is blocked here. Select the code or right-click the preview instead.');
