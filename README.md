@@ -13,6 +13,8 @@ A mesh gradient drawing tool that runs in the browser. Everything lives in one f
 - **12 starter scenes.**
 - **Reference images:** trace over them, pick colors or a palette from them, or turn one into a grid mesh.
 - **Export** to PNG, JPG, PDF, SVG, CSS, HTML, GIF or MP4 (animated distortions), for one frame, a chosen set or all frames.
+- **Random gradients:** the dice beside a frame's name (or **R**) rolls a bright, editable gradient into that frame. New frames start blank.
+- **AI prompt nodes:** the sparkle beside a frame's name opens a Weave-style node graph under the frame. An optional image node feeds a prompt node, which is wired into the frame. Generate asks Claude, on the viewer's Claude account, to compose an editable scene. This works when Meshdraw is opened in Claude.
 - **Light and dark mode** (dark by default) and liquid-glass panels.
 
 ## Running it
