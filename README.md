@@ -29,11 +29,11 @@ The file is written as a page fragment with no `<!doctype>` wrapper, so the host
 
 ## Demo film
 
-`demo/` records "Gradients have a personality", a roughly 40-second film. It opens on a painter's hand blending a sunset, wipes into Meshdraw, rebuilds the same sky as a mesh, and runs a montage of trending looks. It drives the real app in headless Chrome, draws the supers, cursor and transitions in the page, and encodes an MP4.
+`demo/` records "What if a gradient had a personality?", a film of about 40 seconds. A kinetic serif cold open leads into the reveal: "Introducing Meshdraw". Then it shows making a gradient (point, handle, path, spread), melts four colour blocks into a gradient, and cuts through seven looks, each with a personality: Electric, Bold, Romantic, Elegant, Dreamy, Cinematic and Futuristic. It ends with export and the end card. Everything runs in the real app in headless Chrome. Supers, cursor and cuts are drawn in the page.
 
-- `demo/script.js`: the storyboard. Edit supers, order and speeds here.
+- `demo/script.js`: the storyboard. Edit supers, order and speeds here. Add `music: { file: 'assets/track.mp3' }` for a soundtrack.
 - `demo/looks.js`: the gradient looks used in the film.
-- `demo/assets/painter.mp4`: the opening painter shot (AI-generated, not committed). Add your own clip at this path.
+- `demo/overlay.js`: supers, title cards, flash cuts and the end card.
 
 ```bash
 cd demo && npm install && node record.js

@@ -1,121 +1,114 @@
-// Storyboard for the Meshdraw film "Gradients have a personality".
-// Each scene has a name, a playback speed and the actions to perform. Edit the supers, order or speeds here and run
-// record.js again to re-render. The painter shot is assets/painter.mp4 (generated with Gemini).
+// Storyboard for the Meshdraw film: "What if a gradient had a personality?"
+// Each scene has a name, a playback speed and the actions to perform. Supers are serif and stay out of the bottom
+// band. Edit words, order or speeds here and run record.js again to re-render.
 const LOOKS = require('./looks.js');
 
 const BASE_LOOK = { mode: 'freeform', bg: '#0A3FD6', power: 3.2, blur: 0, bands: 0, grain: 0.05, distort: 'none', amount: 0.5, scale: 0.5, flow: false, canvas: 'landscape', cw: 1920, ch: 1080 };
-const frame = (L, empty) => ({ name: L.name, look: { ...BASE_LOOK, ...L.look }, presetKey: 'glacier', customPalette: null, stops: empty ? [] : L.stops, grid: null, warp: null });
-
-// The first frame starts empty and the golden-hour sky is drawn into it live; the rest are ready for the montage.
-const SKY = LOOKS[0];
-const MONTAGE = [
-  { name: 'Liquid chrome', spec: 'Liquid · amount 100% · animated', colors: ['#F7F8FA', '#5E6573', '#0A0A0C'] },
-  { name: 'Fluted glass', spec: 'Fluted · 15 ribs · animated', colors: ['#FF9E7A', '#B79CFF', '#6FC3FF', '#9FF0C8'] },
-  { name: 'Bloom', spec: 'Circular · 4 segments · twist 32%', colors: ['#F1F2D8', '#1DB2F2', '#D8262A', '#3B060A'] },
-  { name: 'Lollipop', spec: 'Swirl · amount 85%', colors: ['#FF4FA3', '#FFD23F', '#3EC6FF', '#7B61FF'] },
-  { name: 'Neon dusk', spec: 'Ripple · grain 58%', colors: ['#3A0CA3', '#FF2E88', '#FFB347', '#00E5FF'] },
-  { name: 'Aurora', spec: 'Liquid · blur 6% · animated', colors: ['#1DE9B6', '#64FFDA', '#7C4DFF', '#040814'] },
-];
+const frame = (L, extra = {}) => ({ name: L.name, look: { ...BASE_LOOK, ...L.look }, presetKey: 'glacier', customPalette: null, stops: L.stops || [], grid: null, warp: null, ...extra });
+const MAKE_PALETTE = ['#F0141E', '#FF8C1A', '#2F7DB0', '#FFF4E2', '#FF3D8B', '#2D6BFF', '#FFE14D', '#FFFFFF'];
+// Words that sit on light looks are set dark so they stay readable.
+const LIGHT = new Set(['Romantic.', 'Dreamy.']);
+const INVERT = new Set(['Elegant.']);
 
 module.exports = {
-  clip: 'assets/painter.mp4',
-  audio: { until: 6.6, fade: 1.1, gain: 4 },
-  seed: { frames: [frame(SKY, true), ...LOOKS.slice(1).map((L) => frame(L))], active: 0, panelOpen: true, newColor: '#F2A541', app: {} },
+  seed: {
+    frames: [frame(LOOKS.make, { customPalette: MAKE_PALETTE }), frame(LOOKS.blocks), ...LOOKS.montage.map((L) => frame(L))],
+    active: 0, panelOpen: true, newColor: '#F0141E', app: {},
+  },
   scenes: [
     {
-      name: 'The painter',
+      name: 'What if a gradient had a personality?',
       speed: 1,
       run: async (d) => {
-        await d.dm('cursor', false);
-        await d.clip();
-        await d.wait(900);
-        await d.dm('serif', 'For centuries, the gradient lived on the brush.');
-        await d.wait(4500);
+        await d.dm('hand', true);
+        await d.jump(1300, 900);
+        await d.dm('card', ['What', 'if'], 90);
+        await d.wait(650);
+        await d.dm('card', ['What', 'if', 'a', 'gradient', { chip: true }], 90, 2);
+        await d.wait(950);
+        await d.dm('card', ['had', 'a', { it: 'personality?', id: 'pw' }], 80);
+        await d.wait(380);
+        const [x, y] = await d.dm('where', 'pw');
+        await d.move(x, y, 380);
+        await d.dm('ripple', x, y);
+        await d.dm('fill', 'pw');
+        await d.wait(420);
+        await d.dm('flood', x, y, 'Introducing', 'Meshdraw');
+        await d.wait(1750);
       },
     },
     {
-      name: 'The flip',
-      speed: 1,
+      name: 'Make one',
+      speed: 1.5,
       run: async (d) => {
-        await d.dm('wipe');
-        await d.wait(700);
-        await d.dm('big', ['Then the canvas changed.'], 'fluid', { scrim: true });
-        await d.wait(1500);
-        await d.dm('clear', 'big');
-        const [x, y] = d.at(0.08, 0.72);
-        await d.jump(x, y);
-        await d.dm('morph', x, y);
-        await d.dm('caption', 'The brush became a cursor.');
-        await d.wait(1500);
-      },
-    },
-    {
-      name: 'The stroke continues',
-      speed: 1.6,
-      run: async (d) => {
-        await d.clickEl('.tool[data-tool="pencil"]');
-        await d.wait(150);
+        await d.dm('flash');
+        await d.dm('clear', 'card'); await d.dm('clear', 'flood');
+        await d.dm('hand', false);
+        const A = d.at(0.28, 0.32), B = d.at(0.72, 0.26), C = d.at(0.62, 0.74);
+        await d.dm('sup', 'Drop a point.', { dark: true });
+        await d.dblclick(...A);
+        await d.slider('#selSpread', 0.5);
+        await d.key('Escape');
+        await d.dblclick(...B);
+        await d.clickEl('#palette button[data-c="#FF8C1A"]');
+        await d.slider('#selSpread', 0.45);
+        await d.key('Escape');
+        await d.dblclick(...C);
+        await d.clickEl('#palette button[data-c="#2F7DB0"]');
+        await d.slider('#selSpread', 0.5);
+        await d.key('Escape');
+        await d.dm('sup', 'Pull a handle.', { dark: true });
+        await d.click(...A);
+        const h = d.frameRect().h * 0.06;
+        await d.dragLine([A[0] + h, A[1]], [A[0] + 230, A[1] + 120], 650);
+        await d.key('Escape');
+        await d.dm('sup', 'Draw a path.', { dark: true });
+        await d.clickEl('#palette button[data-c="#FFF4E2"]');
+        await d.key('b');
         const pts = [];
-        for (let i = 0; i <= 30; i++) { const t = i / 30; pts.push(d.at(0.08 + 0.84 * t, 0.72 - 0.12 * Math.sin(t * Math.PI))); }
-        await d.drag(pts, 1300);
-        await d.wait(250);
+        for (let i = 0; i <= 28; i++) { const t = i / 28; pts.push(d.at(0.1 + 0.8 * t, 0.55 + 0.12 * Math.sin(t * Math.PI * 2.2))); }
+        await d.drag(pts, 900);
         await d.slider('#selSpread', 0.3);
         await d.key('v');
-      },
-    },
-    {
-      name: 'The blend became a mesh',
-      speed: 10,
-      run: async (d) => {
-        await d.dm('caption', 'The blend became a mesh.', '10× speed');
-        for (const p of SKY.stops) {
-          await d.key('Escape');
-          await d.dblclick(...d.at(p.x, p.y));
-          await d.wait(150);
-          await d.setHex(p.color);
-          await d.slider('#selSpread', p.spread);
-          const stretch = Math.hypot(p.hx, p.hy) / 0.06;
-          if (stretch > 1.05) await d.slider('#selStretch', stretch);
-        }
         await d.key('Escape');
-        await d.wait(500);
+        await d.dm('sup', 'Spread it.', { dark: true });
+        await d.click(...C);
+        const r = 0.4 * d.frameRect().h * 0.5 + 9, ang = -0.8;
+        await d.dragLine([C[0] + r * Math.cos(ang), C[1] + r * Math.sin(ang)], [C[0] + r * 1.55 * Math.cos(ang), C[1] + r * 1.55 * Math.sin(ang)], 600);
+        await d.key('Escape');
+        await d.wait(250);
       },
     },
     {
-      name: 'Block vs gradient',
-      speed: 1.25,
+      name: 'Colour block vs gradient',
+      speed: 1.35,
       run: async (d) => {
-        await d.dm('caption', '');
         await d.key('h');
+        await d.key('PageDown');
+        await d.dm('flash');
+        await d.dm('sup', 'A colour block is loud.', { dark: true, size: 120 });
+        await d.wait(1100);
         await d.clickText('#inspector summary', 'Effects');
-        await d.wait(300);
-        await d.slider('#bands', 4, { drag: true, ms: 500 });
-        await d.dm('big', ['A colour block is', 'edgy. solid. loud.'], 'hard', { lineGap: 350 });
-        await d.wait(1800);
-        await d.dm('clear', 'big');
-        await d.slider('#bands', 0, { drag: true, ms: 750 });
-        await d.dm('big', ['A gradient is', 'fluid. easy.'], 'fluid', { lineGap: 420, grad: 1 });
-        await d.wait(1650);
-        await d.dm('big', ['It speaks tech.'], 'fluid', { scrim: true });
-        await d.wait(1250);
-        await d.dm('clear', 'big');
+        await d.slider('#bands', 0, { drag: true, ms: 450 });
+        await d.clickText('#inspector summary', 'Mesh');
+        await d.slider('#power', 2.4, { drag: true, ms: 600 });
+        await d.dm('sup', 'A gradient is fluid.', { dark: true, size: 120, italic: true });
+        await d.wait(1200);
       },
     },
     {
-      name: 'Go wild',
+      name: 'Personalities',
       speed: 1,
       run: async (d) => {
         await d.dm('cursor', false);
         await d.key('\\');
-        await d.dm('big', ['Now give it a personality.'], 'fluid', { scrim: true });
-        await d.wait(1300);
-        await d.dm('clear', 'big');
-        for (const m of MONTAGE) {
+        await d.dm('clear', 'sup');
+        for (const L of LOOKS.montage) {
           await d.key('PageDown');
-          await d.dm('chip', m.name, m.spec, m.colors);
-          await d.wait(1250);
+          await d.dm('flash');
+          await d.dm('sup', L.word, { center: true, italic: true, size: 190, dark: LIGHT.has(L.word), invert: INVERT.has(L.word) });
+          await d.wait(1000);
         }
-        await d.dm('clear', 'chip');
       },
     },
     {
@@ -123,34 +116,35 @@ module.exports = {
       speed: 1,
       run: async (d) => {
         await d.key('Shift+Digit1');
-        await d.dm('big', ['One canvas. Every mood.'], 'fluid', { scrim: true });
-        await d.wait(2000);
-        await d.dm('clear', 'big');
+        await d.dm('flash');
+        await d.dm('sup', 'Every mood. One canvas.', { size: 110, center: true, scrim: true });
+        await d.wait(1600);
       },
     },
     {
       name: 'Export',
-      speed: 1.8,
+      speed: 1.4,
       run: async (d) => {
-        await d.dm('cursor', true);
         await d.key('Shift+Digit2');
+        await d.dm('flash');
+        await d.dm('clear', 'sup');
+        await d.dm('cursor', true);
         await d.clickEl('#exportBtn');
-        await d.wait(500);
+        await d.dm('sup', 'Export it. Still or in motion.', { size: 96, top: '12vh' });
         await d.clickText('#exportFormat button', 'GIF');
-        await d.dm('caption', 'Export it. Still or in motion.');
         await d.wait(1700);
         await d.clickText('#exportFormat button', 'MP4');
-        await d.wait(1300);
+        await d.wait(900);
         await d.key('Escape');
-        await d.dm('caption', '');
       },
     },
     {
       name: 'End card',
       speed: 1,
       run: async (d) => {
+        await d.dm('clear', 'sup');
         await d.dm('end', 'Gradients have a personality.', 'Give yours one.', 'Meshdraw');
-        await d.wait(3600);
+        await d.wait(3200);
       },
     },
   ],

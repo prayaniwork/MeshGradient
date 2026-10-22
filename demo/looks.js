@@ -1,42 +1,73 @@
-// Trending looks for the montage plus the golden-hour sky; each entry is one frame.
+// Gradient looks used in the film: bright, no round blobs. Each entry becomes one frame.
+// Points: P(x, y, color, spread, stretch, angle°). Paths: PATH(color, spread, [[x, y], ...]) through the listed points.
 const H0 = 0.06;
-const P = (x, y, color, spread = 1, stretch = 1, deg = 0) => { const a = deg * Math.PI / 180; return { type: 'point', x, y, color, spread, hx: Math.cos(a) * H0 * stretch, hy: Math.sin(a) * H0 * stretch, blend: 'normal', opacity: 1, soft: 0.5 }; };
-module.exports = [
-  { name: 'Golden hour', look: { power: 3, grain: 0.08, blur: 0.04, bg: '#1B2433' }, stops: [
-    P(0.2, 0.02, '#1B2433', 0.6, 3, 0), P(0.8, 0.02, '#1B2433', 0.6, 3, 0),
-    P(0.15, 0.2, '#2F5D6B', 0.5, 4, 0), P(0.7, 0.18, '#2F5D6B', 0.5, 4, 0),
-    P(0.35, 0.4, '#8E5A7A', 0.42, 5, 0), P(0.85, 0.42, '#8E5A7A', 0.4, 4, 0),
-    P(0.1, 0.58, '#D98C8C', 0.4, 4, 0), P(0.6, 0.6, '#D98C8C', 0.4, 5, 0),
-    P(0.4, 0.76, '#F2A541', 0.42, 7, 0), P(0.92, 0.74, '#F2A541', 0.35, 3, 0),
-    P(0.2, 0.92, '#E8742A', 0.45, 5, 0), P(0.75, 0.94, '#E8742A', 0.45, 5, 0),
-  ] },
-  { name: 'Liquid chrome', look: { power: 6, grain: 0.04, distort: 'liquid', amount: 1, scale: 0.5, flow: true, bg: '#0A0A0C' }, stops: [
-    P(0.1, 0.15, '#F7F8FA', 0.28, 5, 25), P(0.35, 0.3, '#0A0A0C', 0.3, 4, 25), P(0.6, 0.18, '#DDE2EA', 0.26, 5, 25), P(0.85, 0.3, '#1C1F25', 0.3),
-    P(0.2, 0.55, '#16181D', 0.3, 4, -15), P(0.45, 0.62, '#F2F4F8', 0.28, 6, -15), P(0.75, 0.6, '#5E6573', 0.3), P(0.95, 0.75, '#F7F8FA', 0.25),
-    P(0.1, 0.88, '#A9B1BE', 0.3), P(0.4, 0.92, '#0A0A0C', 0.3, 4, 10), P(0.7, 0.9, '#E6E9EF', 0.28, 5, 10),
-  ] },
-  { name: 'Fluted glass', look: { power: 4, grain: 0.04, distort: 'fluted', amount: 1, scale: 0.3, flow: true, bg: '#C7B8FF' }, stops: [
-    P(0.1, 0.3, '#FF9E7A', 0.45), P(0.4, 0.2, '#B79CFF', 0.45), P(0.7, 0.35, '#6FC3FF', 0.45), P(0.95, 0.2, '#FFE3F1', 0.4),
-    P(0.25, 0.8, '#9FF0C8', 0.45), P(0.6, 0.78, '#FF8FC0', 0.45), P(0.9, 0.85, '#FFD08A', 0.4), P(0.5, 0.5, '#FFF8EE', 0.25),
-  ] },
-  { name: 'Bloom', look: { power: 5, grain: 0.1, blur: 0.05, distort: 'circular', amount: 0.32, scale: 0.6, flow: true }, stops: [
-    P(0.5, 0.04, '#F1F2D8', 0.5, 8, 0), P(0.12, 0.04, '#F1F2D8', 0.35), P(0.88, 0.04, '#F1F2D8', 0.35),
-    P(0.5, 0.22, '#3B060A', 0.3, 3.5, 90), P(0.0, 0.26, '#1DB2F2', 0.26, 3.5, 90), P(1.0, 0.26, '#1DB2F2', 0.26, 3.5, 90),
-    P(0.25, 0.45, '#D8262A', 0.11, 12, 90),
-    P(0.25, 0.28, '#F7D7D5', 0.4), P(0.75, 0.28, '#F7D7D5', 0.4), P(0.5, 0.48, '#F7D7D5', 0.5), P(0.0, 0.5, '#F7D7D5', 0.4), P(1.0, 0.5, '#F7D7D5', 0.4),
-    P(0.25, 0.72, '#1DB2F2', 0.5), P(0.75, 0.72, '#1DB2F2', 0.5), P(0.5, 0.82, '#1DB2F2', 0.5),
-    P(0.0, 0.64, '#5A0B10', 0.12, 4, 90), P(1.0, 0.64, '#5A0B10', 0.12, 4, 90), P(0.5, 1.0, '#2E0306', 0.35, 4, 0), P(0.1, 1.0, '#2E0306', 0.3),
-  ] },
-  { name: 'Lollipop', look: { power: 5, grain: 0.05, distort: 'swirl', amount: 0.85, scale: 0.7, flow: true }, stops: [
-    P(0.2, 0.3, '#FF4FA3', 0.5), P(0.8, 0.3, '#FFD23F', 0.5), P(0.5, 0.75, '#3EC6FF', 0.5), P(0.5, 0.5, '#FFFFFF', 0.25), P(0.15, 0.8, '#7B61FF', 0.4), P(0.85, 0.8, '#FF7A59', 0.4),
-  ] },
-  { name: 'Neon dusk', look: { power: 4.2, grain: 0.07, distort: 'ripple', amount: 0.35, scale: 0.25, flow: true, bg: '#0B0221' }, stops: [
-    P(0.5, 0.02, '#0B0221', 0.6, 8, 0), P(0.5, 0.3, '#3A0CA3', 0.5, 8, 0), P(0.5, 0.5, '#B5179E', 0.4, 9, 0), P(0.5, 0.64, '#FF2E88', 0.32, 12, 0),
-    P(0.5, 0.53, '#FFB347', 0.4), P(0.5, 0.5, '#FFE66D', 0.24),
-    P(0.5, 0.8, '#00E5FF', 0.28, 12, 0), P(0.5, 0.97, '#0B0221', 0.4, 8, 0),
-  ] },
-  { name: 'Aurora', look: { power: 3.4, grain: 0.06, blur: 0.06, distort: 'liquid', amount: 0.55, scale: 0.2, flow: true, bg: '#040814' }, stops: [
-    P(0.5, 0.05, '#040814', 0.6, 8, 0), P(0.2, 0.42, '#1DE9B6', 0.22, 10, -12), P(0.65, 0.35, '#64FFDA', 0.2, 10, 8), P(0.45, 0.55, '#7C4DFF', 0.24, 9, -5),
-    P(0.85, 0.5, '#00B0FF', 0.2, 6, 20), P(0.5, 0.9, '#040814', 0.6, 8, 0), P(0.1, 0.7, '#0B1E3A', 0.4),
-  ] },
-];
+const P = (x, y, color, spread = 1, stretch = 1, deg = 0) => {
+  const a = (deg * Math.PI) / 180;
+  return { type: 'point', x, y, color, spread, hx: Math.cos(a) * H0 * stretch, hy: Math.sin(a) * H0 * stretch, blend: 'normal', opacity: 1, soft: 0.5 };
+};
+// Smooth path through the points (Catmull-Rom tangents turned into Bézier handles).
+const PATH = (color, spread, pts) => ({
+  type: 'path', color, spread, blend: 'normal', opacity: 1, soft: 0.5, closed: false,
+  nodes: pts.map(([x, y], i) => {
+    const a = pts[Math.max(0, i - 1)], b = pts[Math.min(pts.length - 1, i + 1)], tx = (b[0] - a[0]) / 6, ty = (b[1] - a[1]) / 6;
+    return { x, y, ix: x - tx, iy: y - ty, ox: x + tx, oy: y + ty, type: 'smooth' };
+  }),
+});
+// A loopy squiggle inside a box, like a thick marker scribble.
+const squiggle = (x0, y0, w, h, loops, tilt = 0) => {
+  const pts = [];
+  for (let i = 0; i <= loops * 10; i++) {
+    const t = i / (loops * 10), a = t * loops * Math.PI * 2;
+    pts.push([x0 + w * (0.1 + 0.8 * t + 0.16 * Math.cos(a + tilt)), y0 + h * (0.5 + 0.4 * Math.sin(a + tilt))]);
+  }
+  return pts;
+};
+
+module.exports = {
+  // The frame the "make one" scene draws into.
+  make: { name: 'Make one', look: { power: 3.4, grain: 0.06, bg: '#FFF4E4' } },
+  // Four flat colour blocks with marker squiggles, set hard with Bands; the film melts them into a gradient.
+  blocks: {
+    name: 'Colour block', look: { power: 7, grain: 0, bands: 3, bg: '#FFD93B' },
+    stops: [
+      P(0.25, 0.25, '#FFD93B', 0.6), P(0.75, 0.25, '#FFB3F0', 0.6), P(0.25, 0.75, '#22D3EE', 0.6), P(0.75, 0.75, '#A3F75B', 0.6),
+      PATH('#FF5A1F', 0.1, squiggle(0.06, 0.06, 0.36, 0.38, 3, 0.4)),
+      PATH('#F0002C', 0.1, squiggle(0.56, 0.06, 0.36, 0.38, 2, 1.6)),
+      PATH('#4A1AB0', 0.1, squiggle(0.06, 0.56, 0.36, 0.38, 3, 2.4)),
+      PATH('#0F5040', 0.1, squiggle(0.56, 0.56, 0.36, 0.38, 4, 0.9)),
+    ],
+  },
+  montage: [
+    { word: 'Electric.', name: 'Fluted glass', look: { power: 4.2, grain: 0.06, distort: 'fluted', amount: 0.9, scale: 0.55, flow: true, bg: '#F59BEA' }, stops: [
+      P(0.1, 0.2, '#FF7A59', 0.35, 4, 70), P(0.45, 0.15, '#E58BFF', 0.4), P(0.85, 0.2, '#FFA2D6', 0.4),
+      P(0.3, 0.45, '#2D6BFF', 0.3, 6, 35), P(0.65, 0.55, '#1E4BFF', 0.3, 6, -30), P(0.15, 0.75, '#3B2BD9', 0.3, 5, 60),
+      P(0.5, 0.85, '#FF8A6B', 0.35, 4, 80), P(0.9, 0.8, '#C77DFF', 0.4),
+    ] },
+    { word: 'Bold.', name: 'Thermal', look: { power: 3.6, grain: 0.1, distort: 'liquid', amount: 0.55, scale: 0.3, flow: true, bg: '#FBE7C6' }, stops: [
+      P(0.25, 0.25, '#F0141E', 0.35, 4, 15), P(0.6, 0.15, '#FF8C1A', 0.35, 3, 0), P(0.85, 0.35, '#FFF1D6', 0.3),
+      P(0.75, 0.65, '#2F7DB0', 0.4, 3, -40), P(0.15, 0.6, '#2F7DB0', 0.25, 3, 80), P(0.35, 0.85, '#F07A1A', 0.35, 3, 0),
+      P(0.45, 0.5, '#FFF4E2', 0.3, 5, -30),
+    ] },
+    { word: 'Romantic.', name: 'Sakura rings', look: { mode: 'radial', power: 2.2, grain: 0.03, bands: 8, bg: '#FBE3F3' }, stops: [
+      P(0.5, 0.5, '#FF9BE6', 1.6), P(0.5, 0.5, '#FF3D8B', 0.95), P(0.5, 0.5, '#D0005A', 0.55), P(0.5, 0.5, '#5A0030', 0.25),
+    ] },
+    { word: 'Elegant.', name: 'Ink', look: { power: 5.5, grain: 0.02, distort: 'liquid', amount: 0.6, scale: 0.25, flow: true, bg: '#FFFFFF' }, stops: [
+      P(0.1, 0.1, '#FFFFFF', 0.5), P(0.9, 0.9, '#FFFFFF', 0.5), P(0.9, 0.12, '#FFFFFF', 0.4), P(0.08, 0.85, '#FFFFFF', 0.4),
+      PATH('#0B0B14', 0.13, [[0.2, 1.0], [0.38, 0.72], [0.42, 0.45], [0.5, 0.3], [0.62, 0.22]]),
+      PATH('#2B2BFF', 0.1, [[0.15, 0.2], [0.3, 0.32], [0.45, 0.3], [0.62, 0.2], [0.8, 0.16]]),
+      PATH('#E0102A', 0.08, [[0.48, 0.55], [0.6, 0.62], [0.72, 0.75], [0.9, 0.9]]),
+    ] },
+    { word: 'Dreamy.', name: 'Pastel grain', look: { power: 2.8, grain: 0.13, bg: '#FFF6EC' }, stops: [
+      P(0.2, 0.04, '#FFE14D', 0.45, 6, 0), P(0.8, 0.06, '#FF8FC2', 0.45, 6, 0), P(0.5, 0.42, '#FFF7F0', 0.4, 9, 0),
+      P(0.3, 0.7, '#FFC2DA', 0.3, 8, 0), P(0.15, 0.96, '#3E8BFF', 0.45, 6, 0), P(0.75, 0.96, '#6FB2FF', 0.4, 6, 0),
+    ] },
+    { word: 'Cinematic.', name: 'Horizon', look: { power: 5, grain: 0.08, bg: '#7C72F4' }, stops: [
+      P(0.03, 0.25, '#2E1FE6', 0.35, 7, 90), P(0.55, 0.22, '#C9C5F7', 0.55, 6, 0), P(0.4, 0.45, '#8F86F0', 0.35, 8, 0),
+      P(0.15, 0.85, '#FF8A00', 0.45, 7, 0), P(0.75, 0.78, '#E85A00', 0.35, 8, 0), P(0.85, 0.98, '#B83A00', 0.35, 6, 0), P(0.5, 0.6, '#FFC98A', 0.09, 14, 0),
+    ] },
+    { word: 'Futuristic.', name: 'Light beam', look: { power: 3.4, grain: 0.05, distort: 'fluted', amount: 0.55, scale: 0.85, flow: true, bg: '#1B3FD8' }, stops: [
+      P(0.5, 0.0, '#1B3FD8', 0.6, 8, 0), P(0.5, 0.38, '#2FB7FF', 0.3, 3, 90), P(0.5, 0.58, '#F2F6FF', 0.25, 3, 90),
+      P(0.2, 0.9, '#FF4A5C', 0.45, 3, 0), P(0.8, 0.9, '#FF4A5C', 0.45, 3, 0), P(0.5, 0.78, '#FF8C9A', 0.25, 3, 90), P(0.1, 0.3, '#2448E0', 0.4), P(0.9, 0.3, '#2448E0', 0.4),
+    ] },
+  ],
+};
