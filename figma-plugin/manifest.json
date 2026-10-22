@@ -1,14 +1,26 @@
 {
-  "name": "Meshdraw",
-  "id": "meshdraw-dev",
+  "name": "MeshGradient",
+  "id": "1695196781559715799",
   "api": "1.0.0",
   "main": "code.js",
   "ui": "ui.html",
-  "editorType": ["figma"],
+  "editorType": [
+    "figma"
+  ],
   "documentAccess": "dynamic-page",
   "networkAccess": {
-    "allowedDomains": ["https://fonts.googleapis.com", "https://fonts.gstatic.com", "https://cdn.jsdelivr.net", "https://api.groq.com"],
+    "allowedDomains": [
+      "https://fonts.googleapis.com",
+      "https://fonts.gstatic.com",
+      "https://cdn.jsdelivr.net",
+      "https://api.groq.com"
+    ],
     "reasoning": "Loads the Geist fonts from Google Fonts and the mp4-muxer library from jsDelivr (for video export), and sends AI prompts to Groq with the user's own API key."
   },
-  "relaunchButtons": [{ "command": "edit", "name": "Edit gradient" }]
+  "relaunchButtons": [
+    {
+      "command": "edit",
+      "name": "Edit gradient"
+    }
+  ]
 }

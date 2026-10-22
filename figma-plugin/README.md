@@ -4,13 +4,15 @@ The Meshdraw editor in a Figma plugin window. It draws mesh gradients and puts t
 
 ## Install for development
 
-1. Build the plugin window from the editor:
+The plugin is registered in Figma as **MeshGradient** (id `1695196781559715799`), and Figma runs it from the `MeshGradient/` folder at the project root. After changing the editor or the plugin, rebuild and deploy into that folder:
 
-   ```bash
-   node figma-plugin/build.js
-   ```
+```bash
+cd MeshGradient && npm run build
+```
 
-2. In the Figma desktop app, choose **Plugins → Development → Import plugin from manifest…** and pick `figma-plugin/manifest.json`.
+This runs `node ../figma-plugin/build.js .`. Then in Figma, run **Plugins → Development → MeshGradient**.
+
+On another machine, import `figma-plugin/manifest.json` with **Plugins → Development → Import plugin from manifest…**, after running `node figma-plugin/build.js`.
 
 ## Using it
 
@@ -41,5 +43,4 @@ The Meshdraw editor in a Figma plugin window. It draws mesh gradients and puts t
 
 ## Before publishing to the Community
 
-- Replace `"id": "meshdraw-dev"` in `manifest.json` with the id Figma assigns when you create the plugin.
 - Each user brings their own Groq key. To offer AI without that, put your key behind a small server, such as a Cloudflare Worker, and call that instead. Never ship a key inside the plugin.

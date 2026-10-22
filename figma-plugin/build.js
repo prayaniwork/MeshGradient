@@ -1,7 +1,9 @@
 // Builds the plugin window, ui.html, from the editor (../meshdraw.html) and bridge.js, so the plugin always runs the
 // same editor as the web app. code.js swaps the /*MESHDRAW_INIT*/ marker for the launch data.
 //
-//   node figma-plugin/build.js
+//   node figma-plugin/build.js            builds figma-plugin/ui.html
+//   node figma-plugin/build.js <folder>   also copies the plugin (manifest, code.js, ui.html) into <folder>, such as the
+//                                         folder Figma created for the plugin, so Figma runs it from there
 const fs = require('fs');
 const path = require('path');
 
@@ -14,3 +16,8 @@ const html = '<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\
   + '<script>/*MESHDRAW_INIT*/</script>\n<script>\n' + bridge + '</script>\n</head>\n<body style="margin:0">\n' + app + '\n</body>\n</html>\n';
 fs.writeFileSync(path.join(here, 'ui.html'), html);
 console.log(`ui.html written (${(html.length / 1024).toFixed(0)} KB)`);
+if (process.argv[2]) {
+  const out = path.resolve(process.argv[2]);
+  for (const f of ['manifest.json', 'code.js', 'ui.html']) fs.copyFileSync(path.join(here, f), path.join(out, f));
+  console.log(`plugin copied to ${out}`);
+}
