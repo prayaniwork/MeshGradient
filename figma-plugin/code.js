@@ -2,12 +2,15 @@
 // keeps the editor's saved state in Figma's client storage, and turns finished renders into layers:
 //   PNG / JPG / GIF → an image fill, MP4 → a video fill, SVG → editable layers built from native Figma gradients.
 // Every layer it makes keeps the gradient's data, so "Edit gradient" reopens it in the editor.
+// AI prompts go to Groq from here, with the user's own key from client storage: the key never enters the editor window.
 
 const DATA_KEY = 'meshdraw';
 const KIND_KEY = 'meshdrawKind';
 const WINDOW = { width: 1180, height: 760 };
 const FILLABLE = new Set(['RECTANGLE', 'ELLIPSE', 'POLYGON', 'STAR', 'VECTOR', 'FRAME', 'COMPONENT', 'INSTANCE', 'BOOLEAN_OPERATION']);
 const MAX_DATA = 90000; // stay well inside Figma's plugin-data size limit per layer
+const KEY_STORE = 'groqApiKey'; // deliberately not a "meshdraw…" key, so it is never copied into the editor's storage
+const GROQ_MODEL = 'openai/gpt-oss-120b';
 
 const canFill = (node) => !!node && !node.removed && FILLABLE.has(node.type) && 'fills' in node;
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
@@ -32,7 +35,8 @@ async function start() {
   for (const key of await figma.clientStorage.keysAsync()) {
     if (key.startsWith('meshdraw')) storage[key] = await figma.clientStorage.getAsync(key);
   }
-  const init = JSON.stringify({ storage, open }).replace(/</g, '\\u003c');
+  const hasKey = !!(await figma.clientStorage.getAsync(KEY_STORE));
+  const init = JSON.stringify({ storage, open, ai: { hasKey } }).replace(/</g, '\\u003c');
   figma.showUI(__html__.replace('/*MESHDRAW_INIT*/', `window.__MESHDRAW_INIT__ = ${init};`), { ...WINDOW, title: 'Meshdraw', themeColors: false });
 }
 
@@ -168,7 +172,27 @@ async function place(items) {
   return { links, message };
 }
 
+// ---------------------------------------------------------------- AI
+// Asks Groq for one JSON scene. Errors carry a code the editor turns into a message.
+async function groqJson(prompt) {
+  const key = await figma.clientStorage.getAsync(KEY_STORE);
+  if (!key) throw { code: 'no_key' };
+  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model: GROQ_MODEL, messages: [{ role: 'user', content: prompt }], response_format: { type: 'json_object' }, temperature: 0.9 }),
+  });
+  if (res.status === 401 || res.status === 403) throw { code: 'bad_key' };
+  if (res.status === 429) throw { code: 'rate_limited' };
+  if (!res.ok) throw { code: 'failed', message: `Groq returned an error (${res.status}). Try again.` };
+  const body = await res.json();
+  try { return JSON.parse(body.choices[0].message.content); } catch (e) { throw { code: 'invalid_json' }; }
+}
+
 // ---------------------------------------------------------------- messages from the editor
+// Requests carry an id; the answer goes back as { type: 'reply', id, ... } or { type: 'reply', id, error }.
+const reply = (id, data) => figma.ui.postMessage({ type: 'reply', id, ...data });
+const failure = (e) => ({ code: (e && e.code) || 'failed', message: (e && e.message) || String(e) });
 figma.ui.onmessage = async (msg) => {
   if (!msg || !msg.type) return;
   if (msg.type === 'storage') {
@@ -180,12 +204,19 @@ figma.ui.onmessage = async (msg) => {
     figma.ui.resize(Math.round(clamp(msg.width, 720, 2400)), Math.round(clamp(msg.height, 520, 1600)));
   } else if (msg.type === 'place') {
     try {
-      figma.ui.postMessage({ type: 'placed', id: msg.id, ...(await place(msg.items)) });
+      reply(msg.id, await place(msg.items));
     } catch (e) {
-      const message = (e && e.message) || String(e);
-      figma.notify(message, { error: true });
-      figma.ui.postMessage({ type: 'placed', id: msg.id, error: message });
+      figma.notify((e && e.message) || String(e), { error: true });
+      reply(msg.id, { error: failure(e) });
     }
+  } else if (msg.type === 'ai-key') {
+    try {
+      if (msg.key) await figma.clientStorage.setAsync(KEY_STORE, String(msg.key).trim());
+      else await figma.clientStorage.deleteAsync(KEY_STORE);
+      reply(msg.id, {});
+    } catch (e) { reply(msg.id, { error: failure(e) }); }
+  } else if (msg.type === 'ai') {
+    try { reply(msg.id, { data: await groqJson(msg.prompt) }); } catch (e) { reply(msg.id, { error: failure(e) }); }
   }
 };
 
