@@ -1,0 +1,7 @@
+{
+  "name": "meshdraw-demo",
+  "private": true,
+  "description": "Records the Meshdraw demo video from script.js",
+  "scripts": { "record": "node record.js" },
+  "dependencies": { "playwright-core": "1.47.2" }
+}

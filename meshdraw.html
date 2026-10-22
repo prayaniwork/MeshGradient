@@ -414,7 +414,7 @@ kbd{display:inline-block;min-width:18px;padding:2px 5px;border-radius:5px;backgr
         <p class="note" id="selNote"></p>
         <div class="field" id="rowSpread" hidden>
           <div class="field-top"><label for="selSpread">Spread</label><output id="selSpreadOut" for="selSpread">1.00</output></div>
-          <input type="range" id="selSpread" min="0.2" max="2.5" step="0.01" value="1">
+          <input type="range" id="selSpread" min="0.05" max="2.5" step="0.01" value="1">
         </div>
         <div class="stack" id="rowsPoint" hidden>
           <div class="field">
@@ -3410,7 +3410,7 @@ ovc.addEventListener('pointermove', (e) => {
     const center = n ? srcToPx(n.x, n.y) : srcToPx(s.x, s.y);
     const rr = Math.max(4, dist(center, [px, py]) - ARC_GAP);
     if (n) n.w = clamp(rr / (ringBase(s) * s.spread), 0.05, 4);
-    else s.spread = clamp(rr / ringBase(s), 0.2, 2.5);
+    else s.spread = clamp(rr / ringBase(s), 0.05, 2.5);
   } else if (drag.kind === 'movePath') {
     translatePath(s, src[0] - drag.last[0], src[1] - drag.last[1]);
     drag.last = src;

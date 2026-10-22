@@ -26,3 +26,13 @@ python3 -m http.server 8000
 Then open http://localhost:8000/meshdraw.html.
 
 The file is written as a page fragment with no `<!doctype>` wrapper, so the hosted viewer can add its own. Browsers render it as it is.
+
+## Demo video
+
+`demo/` records a 40-second walkthrough that builds a radial "Bloom" artwork. It drives the real app in headless Chrome, adds a cursor and captions, and encodes an MP4. Edit the captions, order or speed of each scene in `demo/script.js`, then run:
+
+```bash
+cd demo && npm install && node record.js
+```
+
+This needs Google Chrome and ffmpeg. The video is written to `demo/meshdraw-demo.mp4`.
