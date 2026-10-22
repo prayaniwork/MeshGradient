@@ -124,6 +124,8 @@
       const l = layer('sup', 'dm-sup' + (opt.center ? ' center' : '') + (opt.dark ? ' dark' : '') + (opt.invert ? ' invert' : '') + (opt.scrim ? ' scrim' : ''));
       if (opt.size) l.style.setProperty('--size', opt.size + 'px');
       if (opt.top) l.style.setProperty('--top', opt.top);
+      if (opt.left != null) l.style.left = opt.left + 'px';
+      if (opt.right != null) l.style.right = opt.right + 'px';
       const t = document.createElement('div'); t.className = 't';
       build(t, text.split(' ').map((w) => (opt.italic ? { it: w } : w)), opt.step || 55);
       l.appendChild(t);

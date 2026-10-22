@@ -2091,7 +2091,7 @@ function frameSize(fr) {
   const lk = fr === frames[active] ? settings : fr.look, c = CANVASES[lk.canvas];
   return c && c.w ? [c.w, c.h] : [lk.cw, lk.ch];
 }
-// Frames sit in rows of three on the pasteboard, in list order.
+// Frames sit in rows of three on the pasteboard, in list order, with extra room between rows for the labels.
 const PER_ROW = 3;
 function layout() {
   let y = 0;
@@ -2102,7 +2102,7 @@ function layout() {
       fr.wx = x; fr.wy = y; fr.ww = w; fr.wh = h;
       x += w + GAP; rh = Math.max(rh, h);
     }
-    y += rh + GAP * 2;
+    y += rh + GAP * 3;
   }
 }
 // Temporarily loads another frame's scene into the globals the renderer reads; returns a function that puts the selected frame back.

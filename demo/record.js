@@ -14,8 +14,9 @@ const STORY = require('./script.js');
 const W = 1920, H = 1080, FPS = 30;
 const CHROME = process.env.CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const OUT = path.resolve(process.argv[2] || path.join(__dirname, 'meshdraw-demo.mp4'));
-// Optional soundtrack: music: { file, gain, fade, at, drop } in script.js. If `at` names a d.mark() in the storyboard,
-// the track is shifted so its `drop` (seconds into the track) lands on that moment; it is cut to the film and faded out.
+// Optional soundtrack in script.js: music: { file, gain, fade } plus either `edit(marks, total)`, which returns pieces
+// { at, src } (film seconds ← track seconds) placed against the storyboard's d.mark() moments, or `at` + `drop` to shift
+// the whole track so its drop lands on one mark. The result is cut to the film and faded out.
 const MUSIC = STORY.music ? { gain: 1, fade: 1.5, ...STORY.music, file: path.resolve(__dirname, STORY.music.file) } : null;
 const TMP = fs.mkdtempSync(path.join(require('os').tmpdir(), 'meshdraw-demo-'));
 
@@ -33,6 +34,8 @@ function serve() {
 
 // ------------------------------------------------------------------ actions the storyboard can use
 const beats = {};
+// What the app's view is doing: settings panel open or not, and how far the selected frame was shrunk and lowered after a fit.
+const view = { panel: true, f: 1, dy: 0 };
 function director(page, base) {
   let mx = W / 2, my = H / 2;
   const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
@@ -56,15 +59,43 @@ function director(page, base) {
   }
   async function click(x, y) { await move(x, y); await page.mouse.down(); await wait(40); await page.mouse.up(); await wait(120); }
   async function dblclick(x, y) { await move(x, y); await page.mouse.dblclick(x, y); mx = x; my = y; await wait(150); }
-  // Mirrors the app's "zoom to frame" layout so frame coordinates map to the screen.
-  function frameRect(panel = true) {
-    const l = 72, r = panel ? 304 : 0, t = 60, b = 52, aw = W - l - r, ah = H - t - b, fw = 1920, fh = 1080;
-    const z = Math.min((aw - 72) / fw, (ah - 72) / fh), w = fw * z, h = fh * z;
-    return { x: l + (aw - w) / 2, y: t + (ah - h) / 2, w, h };
+  // The app's canvas area beside the toolbar and settings panel.
+  function area(panel = view.panel) {
+    const l = 72, r = panel ? 304 : 0, t = 60, b = 52;
+    return { x: l, y: t, w: W - l - r, h: H - t - b };
+  }
+  // Mirrors the app's "zoom to frame" layout, then the shrink and lowering applied after it, so frame coordinates map to the screen.
+  function frameRect(panel = view.panel) {
+    const a = area(panel), fw = 1920, fh = 1080;
+    const z = Math.min((a.w - 72) / fw, (a.h - 72) / fh), w = fw * z, h = fh * z, cx = a.x + a.w / 2, cy = a.y + a.h / 2;
+    const f = view.f;
+    return { x: cx - (w * f) / 2, y: cy - (h * f) / 2 + view.dy, w: w * f, h: h * f };
+  }
+  const wheel = (opt) => page.evaluate((o) => document.getElementById('overlay').dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, ...o })), opt);
+  // Zooms the fitted frame out to f of its size and lowers it by dy, leaving room above it for supers.
+  async function shrink(f = 0.8, dy = 70) {
+    const a = area(), cx = a.x + a.w / 2, cy = a.y + a.h / 2;
+    await wheel({ deltaY: -Math.log(f) / 0.006, ctrlKey: true, clientX: cx, clientY: cy });
+    await wheel({ deltaY: -dy, clientX: cx, clientY: cy });
+    view.f = f; view.dy = dy;
   }
   return {
-    wait, move, click, dblclick, frameRect, dm,
+    wait, move, click, dblclick, frameRect, dm, shrink,
     mark: (name) => { beats[name] = Date.now() / 1000; },
+    // Presses a key that zooms to a frame (PageDown, Shift+Digit2...), then shrinks it unless told not to.
+    async fit(k, opt = {}) {
+      await page.keyboard.press(k);
+      view.f = 1; view.dy = 0;
+      if (opt.shrink !== false) await shrink(opt.f, opt.dy);
+      await wait(60);
+    },
+    async panel(open) { if (view.panel !== open) { await page.keyboard.press('\\'); view.panel = open; await wait(60); } },
+    // Serif super centred in the empty canvas above the selected frame.
+    async sup(text, opt = {}) {
+      const a = area(), r = frameRect(), size = opt.size || 112;
+      const top = Math.max(64, (a.y + r.y - 14) / 2 - size * 0.62);
+      await dm('sup', text, { ...opt, size, top: top + 'px', left: a.x, right: W - a.x - a.w });
+    },
     at: (u, v) => { const r = frameRect(); return [r.x + u * r.w, r.y + v * r.h]; },
     jump: (x, y) => { mx = x; my = y; return page.mouse.move(x, y); },
     async clickEl(sel) { const b = await box(sel); await click(b.x + b.width / 2, b.y + b.height / 2); },
@@ -180,11 +211,23 @@ function director(page, base) {
   const args = ['-y', '-loglevel', 'error', '-f', 'concat', '-safe', '0', '-i', listFile];
   if (MUSIC) args.push('-i', MUSIC.file);
   args.push('-vf', `fps=${FPS},format=yuv420p`, '-c:v', 'libx264', '-preset', 'slow', '-crf', '17');
-  if (MUSIC) {
+  if (MUSIC && MUSIC.edit) {
+    // An edit list of { at: video seconds, src: track seconds } pieces, cut together with tiny fades.
+    const marks = Object.fromEntries(Object.entries(beats).map(([k, t]) => [k, toVideo(t)]));
+    const segs = MUSIC.edit(marks, total).filter((s, i, all) => i === all.length - 1 || all[i + 1].at > s.at + 0.02);
+    const parts = segs.map((s, i) => {
+      const len = (i + 1 < segs.length ? segs[i + 1].at : total) - s.at, d = Math.min(0.012, len / 4);
+      return `[m${i}]atrim=start=${s.src.toFixed(3)}:end=${(s.src + len).toFixed(3)},asetpts=PTS-STARTPTS,afade=t=in:d=${i ? d : 0.15},afade=t=out:st=${(len - d).toFixed(3)}:d=${d}[p${i}]`;
+    });
+    const fadeAt = Math.max(0, total - MUSIC.fade).toFixed(3);
+    const graph = `[1:a]asplit=${segs.length}${segs.map((_, i) => `[m${i}]`).join('')};${parts.join(';')};${segs.map((_, i) => `[p${i}]`).join('')}concat=n=${segs.length}:v=0:a=1,volume=${MUSIC.gain},alimiter=limit=0.79:level=disabled,afade=t=out:st=${fadeAt}:d=${MUSIC.fade},apad[a]`;
+    args.push('-filter_complex', graph, '-map', '0:v', '-map', '[a]', '-c:a', 'aac', '-b:a', '192k', '-shortest');
+    console.log('music edit: ' + segs.map((s) => `${s.at.toFixed(2)}s ← track ${s.src.toFixed(2)}s`).join(' · '));
+  } else if (MUSIC) {
     const at = MUSIC.at && beats[MUSIC.at] != null ? toVideo(beats[MUSIC.at]) : null;
     const shift = at == null ? 0 : at - (MUSIC.drop || 0), trim = Math.max(0, -shift), delay = Math.round(Math.max(0, shift) * 1000);
     const end = total.toFixed(3), fadeAt = Math.max(0, total - MUSIC.fade).toFixed(3);
-    args.push('-filter_complex', `[1:a]atrim=start=${trim.toFixed(3)},asetpts=PTS-STARTPTS,adelay=${delay}:all=1,atrim=0:${end},volume=${MUSIC.gain},afade=t=out:st=${fadeAt}:d=${MUSIC.fade},apad[a]`,
+    args.push('-filter_complex', `[1:a]atrim=start=${trim.toFixed(3)},asetpts=PTS-STARTPTS,adelay=${delay}:all=1,atrim=0:${end},volume=${MUSIC.gain},alimiter=limit=0.79:level=disabled,afade=t=out:st=${fadeAt}:d=${MUSIC.fade},apad[a]`,
       '-map', '0:v', '-map', '[a]', '-c:a', 'aac', '-b:a', '192k', '-shortest');
     if (at != null) console.log(`music: drop at ${(at).toFixed(2)}s (track ${shift >= 0 ? 'delayed' : 'trimmed'} ${Math.abs(shift).toFixed(2)}s)`);
   }
