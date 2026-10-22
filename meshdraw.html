@@ -732,6 +732,10 @@ const CANVASES = {
   banner: { name: '3:1', label: 'Banner', w: 1500, h: 500 },
   custom: { name: 'Custom', label: 'Custom' },
 };
+// Embedding: a host page (the Figma plugin) can define window.meshdrawHost before this script runs. It can open a frame,
+// limit the export formats and cap image sizes, and it receives finished renders instead of downloads. Without a host
+// the app runs on its own.
+const host = window.meshdrawHost || null;
 const FORMATS = {
   png: { name: 'PNG', sub: 'Image', ext: 'png', raster: true },
   jpg: { name: 'JPG', sub: 'Image', ext: 'jpg', raster: true },
@@ -2686,13 +2690,17 @@ function b64ToF32(b) {
   for (let i = 0; i < s.length; i++) u[i] = s.charCodeAt(i);
   return out;
 }
+// A frame as plain data: what is saved, and what a host stores with a layer so the gradient can be edited again.
+function frameData(fr) {
+  return { name: fr.name, look: fr.look, presetKey: fr.presetKey, customPalette: fr.customPalette, link: fr.link || null,
+    stops: JSON.parse(JSON.stringify(fr.stops, strip)), grid: fr.grid, warp: fr.warp ? f32ToB64(fr.warp) : null };
+}
 function save() {
   if (!frames.length) return;
   storeActive();
   try {
     localStorage.setItem(KEY, JSON.stringify({
-      frames: frames.map((fr) => ({ id: fr.id, name: fr.name, look: fr.look, presetKey: fr.presetKey, customPalette: fr.customPalette,
-        stops: JSON.parse(JSON.stringify(fr.stops, strip)), grid: fr.grid, warp: fr.warp ? f32ToB64(fr.warp) : null })),
+      frames: frames.map(frameData),
       active, view, panelOpen, newColor,
       app: { brush: settings.brush, strength: settings.strength, refShow: settings.refShow, refOpacity: settings.refOpacity, refFit: settings.refFit },
     }));
@@ -2709,29 +2717,31 @@ function validGrid(g) {
     Array.isArray(g.v) && g.v.length === g.rows * g.cols &&
     g.v.every((v) => normHex(v.color) && ['x', 'y', 'lx', 'ly', 'rx', 'ry', 'tx', 'ty', 'bx', 'by'].every((k) => isFinite(v[k])));
 }
+// Checks saved frame data and turns it into a live frame, or returns null.
+function parseFrame(f) {
+  if (!f || !Array.isArray(f.stops) || !f.stops.every(validStop)) return null;
+  const look = { ...pickLook(DEFAULTS), ...(f.look || {}) };
+  if (!MODES[look.mode]) look.mode = 'freeform';
+  if (!DISTORTS[look.distort]) look.distort = 'none';
+  if (!CANVASES[look.canvas]) look.canvas = 'landscape';
+  look.bg = normHex(look.bg) || DEFAULTS.bg;
+  const g = validGrid(f.grid) ? f.grid : null;
+  if (g) g.v.forEach((v) => { v.color = normHex(v.color); v.type = v.type || 'smooth'; });
+  return {
+    id: fid++, name: String(f.name || 'Frame').slice(0, 60), look, presetKey: PRESETS[f.presetKey] ? f.presetKey : 'glacier',
+    customPalette: Array.isArray(f.customPalette) && f.customPalette.every(normHex) ? f.customPalette.map(normHex) : null,
+    link: typeof f.link === 'string' ? f.link : null,
+    stops: f.stops.map((s) => ({ ...s, id: uid++, color: normHex(s.color), blend: BLEND_IDX[s.blend] != null ? s.blend : 'normal', opacity: isFinite(s.opacity) ? s.opacity : 1, soft: isFinite(s.soft) ? s.soft : 0.5 })),
+    grid: g, warp: f.warp ? b64ToF32(f.warp) : null, undo: [], redo: [], cacheDirty: true,
+  };
+}
 function load() {
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return false;
     const d = JSON.parse(raw);
     if (!Array.isArray(d.frames) || !d.frames.length) return false;
-    const list = [];
-    for (const f of d.frames.slice(0, MAX_FRAMES)) {
-      if (!Array.isArray(f.stops) || !f.stops.every(validStop)) continue;
-      const look = { ...pickLook(DEFAULTS), ...(f.look || {}) };
-      if (!MODES[look.mode]) look.mode = 'freeform';
-      if (!DISTORTS[look.distort]) look.distort = 'none';
-      if (!CANVASES[look.canvas]) look.canvas = 'landscape';
-      look.bg = normHex(look.bg) || DEFAULTS.bg;
-      const g = validGrid(f.grid) ? f.grid : null;
-      if (g) g.v.forEach((v) => { v.color = normHex(v.color); v.type = v.type || 'smooth'; });
-      list.push({
-        id: fid++, name: String(f.name || 'Frame').slice(0, 60), look, presetKey: PRESETS[f.presetKey] ? f.presetKey : 'glacier',
-        customPalette: Array.isArray(f.customPalette) && f.customPalette.every(normHex) ? f.customPalette.map(normHex) : null,
-        stops: f.stops.map((s) => ({ ...s, id: uid++, color: normHex(s.color), blend: BLEND_IDX[s.blend] != null ? s.blend : 'normal', opacity: isFinite(s.opacity) ? s.opacity : 1, soft: isFinite(s.soft) ? s.soft : 0.5 })),
-        grid: g, warp: f.warp ? b64ToF32(f.warp) : null, undo: [], redo: [], cacheDirty: true,
-      });
-    }
+    const list = d.frames.slice(0, MAX_FRAMES).map(parseFrame).filter(Boolean);
     if (!list.length) return false;
     frames = list;
     active = clamp(Number(d.active) || 0, 0, frames.length - 1);
@@ -2940,6 +2950,33 @@ function addFrame(fr, at) {
   layout();
   activateFrame(at, false);
   return true;
+}
+// The host opens either a frame stored with one of its layers (frame), or a new frame sized to a layer (size). A frame
+// already linked to the same layer is reused, so editing a layer twice doesn't pile up copies.
+function openFromHost(o) {
+  storeActive();
+  let i = o.link ? frames.findIndex((f) => f.link === o.link) : -1;
+  const parsed = o.frame ? parseFrame({ ...o.frame, link: o.link || null }) : null;
+  let key = null;
+  if (parsed) {
+    if (i >= 0) { if (frames[i].cache) freeTarget(frames[i].cache.t); frames[i] = parsed; } else { frames.push(parsed); i = frames.length - 1; }
+  } else if (i < 0) {
+    let [w, h] = o.size || [1920, 1080];
+    const k = Math.max(1, 64 / Math.min(w, h)), k2 = Math.min(1, 8192 / (Math.max(w, h) * k));
+    w = Math.round(w * k * k2); h = Math.round(h * k * k2);
+    const used = new Set(frames.map((f) => f.presetKey));
+    key = PRESET_KEYS.find((p) => !used.has(p)) || PRESET_KEYS[frames.length % PRESET_KEYS.length];
+    const fr = makeFrame(o.name || PRESETS[key].name, { canvas: 'custom', cw: w, ch: h });
+    fr.link = o.link || null;
+    if (frames.length >= MAX_FRAMES) frames.shift();
+    frames.push(fr);
+    i = frames.length - 1;
+  }
+  active = i;
+  loadActive();
+  layout(); applyView(true);
+  if (key) { loadPreset(key); undoStack = []; redoStack = []; }
+  fitFrame();
 }
 function newFrame() {
   const used = new Set(frames.map((f) => f.presetKey));
@@ -4356,7 +4393,7 @@ function framePixels(fr, w, h) {
   return out;
 }
 function exportSize(fr, scale) {
-  const max = Math.min(gl.getParameter(gl.MAX_TEXTURE_SIZE), gl.getParameter(gl.MAX_RENDERBUFFER_SIZE));
+  const max = Math.min(gl.getParameter(gl.MAX_TEXTURE_SIZE), gl.getParameter(gl.MAX_RENDERBUFFER_SIZE), (host && host.maxSize) || Infinity);
   const [nw, nh] = frameSize(fr);
   const w = nw * scale, h = nh * scale, k = Math.min(1, max / w, max / h, Math.sqrt(16e6 / (w * h)));
   return [Math.max(1, Math.floor(w * k)), Math.max(1, Math.floor(h * k))];
@@ -4382,7 +4419,7 @@ let exportLen = 4;
 const canMove = (fr) => (fr === frames[active] ? settings : fr.look).distort !== 'none';
 function motionSize(fr) {
   const [nw, nh] = frameSize(fr), long = MOTION[exportFmt].sizes[exportScale - 1];
-  const k = Math.min(1, 4096 / long) * long / Math.max(nw, nh);
+  const k = Math.min(1, ((host && host.maxSize) || 4096) / long) * long / Math.max(nw, nh);
   const even = (v) => Math.max(2, Math.round(v / 2) * 2);
   return [even(nw * k), even(nh * k)];
 }
@@ -4651,11 +4688,18 @@ const safeName = (s) => (s || 'frame').trim().replace(/[\\/:*?"<>|]+/g, '-').rep
 const exportPicked = new Set();
 let exportFmt = 'png', exportScope = 'one', exportScale = 2, exportURL = null, exportJob = 0, exportText = '', exportBlob = null;
 for (const [k, f] of Object.entries(FORMATS)) {
+  if (host && host.formats && !host.formats.includes(k)) continue;
   const b = document.createElement('button');
   b.type = 'button'; b.dataset.f = k; b.setAttribute('aria-pressed', String(k === exportFmt));
   b.innerHTML = `<b>${f.name}</b><span>${f.sub}</span>`;
   b.addEventListener('click', () => { exportFmt = k; refreshExport(); });
   ui.exportFormat.appendChild(b);
+}
+const dlLabel = () => (host && host.actionLabel ? host.actionLabel(exportFmt, exportTargets().length) : 'Download');
+if (host) {
+  ui.exportBtn.textContent = host.exportLabel || 'Export';
+  $('#exportTitle').textContent = host.exportLabel || 'Export';
+  $('label[for="exportName"]').textContent = 'Layer name';
 }
 function exportTargets() {
   storeActive();
@@ -4686,6 +4730,7 @@ function renderPick() {
   });
 }
 function fmtNote() {
+  if (host && host.notes && host.notes[exportFmt]) return host.notes[exportFmt];
   const n = exportTargets().length, all = n > 1;
   return {
     png: all ? `Each frame as a PNG, packed in a ZIP.` : 'Lossless image with the exact gradient and grain.',
@@ -4730,6 +4775,8 @@ async function refreshExport() {
   ui.copyBtn.textContent = exportFmt === 'png' ? 'Copy image' : `Copy ${fmt.name}`;
   ui.dlBtn.hidden = exportFmt === 'css' && inViewer;
   ui.exportHow.textContent = exportFmt === 'css' && inViewer ? ' · Copy the CSS into your stylesheet.' : fmt.raster ? ' · Right-click the preview to save it as an image too.' : '';
+  ui.dlBtn.textContent = dlLabel();
+  if (host) { ui.dlBtn.hidden = false; ui.copyBtn.hidden = true; ui.exportHow.textContent = ''; }
   if (fmt.motion) {
     const movers = targets.filter(canMove), pf = movers.includes(fr) ? fr : movers[0];
     if (!movers.length || (exportFmt === 'mp4' && !canMp4())) {
@@ -4779,6 +4826,7 @@ async function downloadExport() {
   let name = ui.exportName.value.trim() || 'meshdraw';
   ui.dlBtn.disabled = true; ui.dlBtn.textContent = 'Preparing…';
   try {
+    if (host) { await placeInHost(targets); return; }
     let blob;
     const many = targets.length > 1, enc = new TextEncoder();
     if (fmt.motion) {
@@ -4823,8 +4871,30 @@ async function downloadExport() {
     console.error(e);
     toast(FORMATS[exportFmt].motion ? 'The animation couldn’t be rendered here. Try a smaller size or GIF.' : 'Export failed. Try a smaller size.');
   } finally {
-    ui.dlBtn.disabled = false; ui.dlBtn.textContent = 'Download';
+    ui.dlBtn.disabled = false; ui.dlBtn.textContent = dlLabel();
   }
+}
+// Hands one finished render per frame to the host instead of saving files. SVG sends the colour grid, so the host can
+// build its own vector layers from it.
+async function placeInHost(targets) {
+  const list = FORMATS[exportFmt].motion ? targets.filter(canMove) : targets, items = [];
+  for (const [k, f] of list.entries()) {
+    const progress = (i, n) => { ui.dlBtn.textContent = `Rendering ${list.length > 1 ? `${k + 1}/${list.length} · ` : ''}${Math.round((i / n) * 100)}%`; };
+    const typed = ui.exportName.value.trim().replace(/\.[a-z0-9]+$/i, '');
+    const item = { name: list.length > 1 || !typed ? f.name : typed, format: exportFmt, size: frameSize(f), link: f.link || null, data: frameData(f) };
+    if (exportFmt === 'svg') item.grid = meshGrid(f);
+    else {
+      const blob = exportFmt === 'gif' ? await encodeGif(f, progress) : exportFmt === 'mp4' ? await encodeMp4(f, progress)
+        : (await frameImage(f, exportScale, exportFmt === 'png' ? 'image/png' : 'image/jpeg')).blob;
+      item.bytes = new Uint8Array(await blob.arrayBuffer());
+    }
+    items.push(item);
+  }
+  ui.dlBtn.textContent = 'Adding…';
+  const res = (await host.place(items)) || {};
+  (res.links || []).forEach((l, i) => { if (l && list[i]) list[i].link = l; });
+  if (res.message) toast(res.message);
+  scheduleSave();
 }
 function dedupeNames(files) {
   const seen = {};
@@ -4898,6 +4968,7 @@ if (!hadSave) {
   }
   active = 0; loadActive(); layout(); fitFrame(); applyView(true);
 }
+if (host && host.open) openFromHost(host.open);
 setPanel(panelOpen);
 try { const r = localStorage.getItem(REF_KEY); if (r) useRefImage(r, false); } catch (e) { /* no stored reference */ }
 updateWell(); syncAll(); setTool('select', false);
