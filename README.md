@@ -29,6 +29,10 @@ Then open http://localhost:8000/meshdraw.html.
 
 The file is written as a page fragment with no `<!doctype>` wrapper, so the hosted viewer can add its own. Browsers render it as it is.
 
+## Figma plugin
+
+`figma-plugin/` runs the same editor inside Figma. It adds gradients as image fills, editable gradient layers, GIF or video fills, and reopens them with **Edit gradient**. AI prompts go through Groq with each user's own key. See [figma-plugin/README.md](figma-plugin/README.md).
+
 ## Demo film
 
 `demo/` records "What if a gradient had a personality?", a film of about 40 seconds. A kinetic serif cold open leads into the reveal: "Introducing Meshdraw". Then it shows making a gradient (point, handle, path, spread), melts four colour blocks into a gradient, and cuts through seven looks, each with a personality: Electric, Bold, Romantic, Elegant, Dreamy, Cinematic and Futuristic. It moves through a perspective showreel of every look, and ends with export and the end card. Everything runs in the real app in headless Chrome. Supers, cursor and cuts are drawn in the page.

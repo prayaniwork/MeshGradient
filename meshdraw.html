@@ -324,6 +324,9 @@ kbd{display:inline-block;min-width:18px;padding:2px 5px;border-radius:5px;backgr
 .node-row .btn{height:34px;min-width:0}
 .node-row .node-add[hidden]{display:none}
 .node img{display:block;width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:10px}
+.node-foot{display:flex;align-items:flex-start;gap:8px}
+.node-foot .node-status{flex:1}
+.node-key .text-in{height:34px;flex:1;font-family:var(--font-mono)}
 .node-status{margin:0;font-size:12px;line-height:1.4;color:var(--ink-2);min-height:1.4em;text-wrap:pretty}
 .nogl{position:absolute;inset:0;display:grid;place-items:center;padding-left:var(--gl);padding-right:var(--gr)}
 .nogl .float{padding:20px;max-width:380px;border-radius:16px}
@@ -751,6 +754,10 @@ const CANVASES = {
   banner: { name: '3:1', label: 'Banner', w: 1500, h: 500 },
   custom: { name: 'Custom', label: 'Custom' },
 };
+// Embedding: a host page (the Figma plugin) can define window.meshdrawHost before this script runs. It can open a frame,
+// limit the export formats and cap image sizes, and it receives finished renders instead of downloads. Without a host
+// the app runs on its own.
+const host = window.meshdrawHost || null;
 const FORMATS = {
   png: { name: 'PNG', sub: 'Image', ext: 'png', raster: true },
   jpg: { name: 'JPG', sub: 'Image', ext: 'jpg', raster: true },
@@ -2736,14 +2743,18 @@ function b64ToF32(b) {
   for (let i = 0; i < s.length; i++) u[i] = s.charCodeAt(i);
   return out;
 }
+// A frame as plain data: what is saved, and what a host stores with a layer so the gradient can be edited again.
+function frameData(fr) {
+  return { name: fr.name, look: fr.look, presetKey: fr.presetKey, customPalette: fr.customPalette, link: fr.link || null,
+    ai: fr.ai && (fr.ai.open || fr.ai.text || fr.ai.img) ? { open: fr.ai.open, text: fr.ai.text, img: fr.ai.img } : null,
+    stops: JSON.parse(JSON.stringify(fr.stops, strip)), grid: fr.grid, warp: fr.warp ? f32ToB64(fr.warp) : null };
+}
 function save() {
   if (!frames.length) return;
   storeActive();
   try {
     localStorage.setItem(KEY, JSON.stringify({
-      frames: frames.map((fr) => ({ id: fr.id, name: fr.name, look: fr.look, presetKey: fr.presetKey, customPalette: fr.customPalette,
-        ai: fr.ai && (fr.ai.open || fr.ai.text || fr.ai.img) ? { open: fr.ai.open, text: fr.ai.text, img: fr.ai.img } : null,
-        stops: JSON.parse(JSON.stringify(fr.stops, strip)), grid: fr.grid, warp: fr.warp ? f32ToB64(fr.warp) : null })),
+      frames: frames.map(frameData),
       active, view, panelOpen, newColor,
       app: { brush: settings.brush, strength: settings.strength, refShow: settings.refShow, refOpacity: settings.refOpacity, refFit: settings.refFit },
     }));
@@ -2760,30 +2771,32 @@ function validGrid(g) {
     Array.isArray(g.v) && g.v.length === g.rows * g.cols &&
     g.v.every((v) => normHex(v.color) && ['x', 'y', 'lx', 'ly', 'rx', 'ry', 'tx', 'ty', 'bx', 'by'].every((k) => isFinite(v[k])));
 }
+// Checks saved frame data and turns it into a live frame, or returns null.
+function parseFrame(f) {
+  if (!f || !Array.isArray(f.stops) || !f.stops.every(validStop)) return null;
+  const look = { ...pickLook(DEFAULTS), ...(f.look || {}) };
+  if (!MODES[look.mode]) look.mode = 'freeform';
+  if (!DISTORTS[look.distort]) look.distort = 'none';
+  if (!CANVASES[look.canvas]) look.canvas = 'landscape';
+  look.bg = normHex(look.bg) || DEFAULTS.bg;
+  const g = validGrid(f.grid) ? f.grid : null;
+  if (g) g.v.forEach((v) => { v.color = normHex(v.color); v.type = v.type || 'smooth'; });
+  return {
+    id: fid++, name: String(f.name || 'Frame').slice(0, 60), look, presetKey: PRESETS[f.presetKey] ? f.presetKey : 'glacier',
+    customPalette: Array.isArray(f.customPalette) && f.customPalette.every(normHex) ? f.customPalette.map(normHex) : null,
+    link: typeof f.link === 'string' ? f.link : null,
+    stops: f.stops.map((s) => ({ ...s, id: uid++, color: normHex(s.color), blend: BLEND_IDX[s.blend] != null ? s.blend : 'normal', opacity: isFinite(s.opacity) ? s.opacity : 1, soft: isFinite(s.soft) ? s.soft : 0.5 })),
+    grid: g, warp: f.warp ? b64ToF32(f.warp) : null, undo: [], redo: [], cacheDirty: true,
+    ai: f.ai && typeof f.ai === 'object' ? { open: !!f.ai.open, text: String(f.ai.text || '').slice(0, 2000), img: typeof f.ai.img === 'string' && f.ai.img.startsWith('data:image/') ? f.ai.img : null } : null,
+  };
+}
 function load() {
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return false;
     const d = JSON.parse(raw);
     if (!Array.isArray(d.frames) || !d.frames.length) return false;
-    const list = [];
-    for (const f of d.frames.slice(0, MAX_FRAMES)) {
-      if (!Array.isArray(f.stops) || !f.stops.every(validStop)) continue;
-      const look = { ...pickLook(DEFAULTS), ...(f.look || {}) };
-      if (!MODES[look.mode]) look.mode = 'freeform';
-      if (!DISTORTS[look.distort]) look.distort = 'none';
-      if (!CANVASES[look.canvas]) look.canvas = 'landscape';
-      look.bg = normHex(look.bg) || DEFAULTS.bg;
-      const g = validGrid(f.grid) ? f.grid : null;
-      if (g) g.v.forEach((v) => { v.color = normHex(v.color); v.type = v.type || 'smooth'; });
-      list.push({
-        id: fid++, name: String(f.name || 'Frame').slice(0, 60), look, presetKey: PRESETS[f.presetKey] ? f.presetKey : 'glacier',
-        customPalette: Array.isArray(f.customPalette) && f.customPalette.every(normHex) ? f.customPalette.map(normHex) : null,
-        stops: f.stops.map((s) => ({ ...s, id: uid++, color: normHex(s.color), blend: BLEND_IDX[s.blend] != null ? s.blend : 'normal', opacity: isFinite(s.opacity) ? s.opacity : 1, soft: isFinite(s.soft) ? s.soft : 0.5 })),
-        grid: g, warp: f.warp ? b64ToF32(f.warp) : null, undo: [], redo: [], cacheDirty: true,
-        ai: f.ai && typeof f.ai === 'object' ? { open: !!f.ai.open, text: String(f.ai.text || '').slice(0, 2000), img: typeof f.ai.img === 'string' && f.ai.img.startsWith('data:image/') ? f.ai.img : null } : null,
-      });
-    }
+    const list = d.frames.slice(0, MAX_FRAMES).map(parseFrame).filter(Boolean);
     if (!list.length) return false;
     frames = list;
     active = clamp(Number(d.active) || 0, 0, frames.length - 1);
@@ -2993,6 +3006,33 @@ function addFrame(fr, at) {
   activateFrame(at, false);
   return true;
 }
+// The host opens either a frame stored with one of its layers (frame), or a new frame sized to a layer (size). A frame
+// already linked to the same layer is reused, so editing a layer twice doesn't pile up copies.
+function openFromHost(o) {
+  storeActive();
+  let i = o.link ? frames.findIndex((f) => f.link === o.link) : -1;
+  const parsed = o.frame ? parseFrame({ ...o.frame, link: o.link || null }) : null;
+  let key = null;
+  if (parsed) {
+    if (i >= 0) { if (frames[i].cache) freeTarget(frames[i].cache.t); frames[i] = parsed; } else { frames.push(parsed); i = frames.length - 1; }
+  } else if (i < 0) {
+    let [w, h] = o.size || [1920, 1080];
+    const k = Math.max(1, 64 / Math.min(w, h)), k2 = Math.min(1, 8192 / (Math.max(w, h) * k));
+    w = Math.round(w * k * k2); h = Math.round(h * k * k2);
+    const used = new Set(frames.map((f) => f.presetKey));
+    key = PRESET_KEYS.find((p) => !used.has(p)) || PRESET_KEYS[frames.length % PRESET_KEYS.length];
+    const fr = makeFrame(o.name || PRESETS[key].name, { canvas: 'custom', cw: w, ch: h });
+    fr.link = o.link || null;
+    if (frames.length >= MAX_FRAMES) frames.shift();
+    frames.push(fr);
+    i = frames.length - 1;
+  }
+  active = i;
+  loadActive();
+  layout(); applyView(true);
+  if (key) { loadPreset(key); undoStack = []; redoStack = []; }
+  fitFrame();
+}
 // New frames start blank (white, no grain) at the selected frame's size.
 function newFrame() {
   const cur = pickLook(settings);
@@ -3101,7 +3141,10 @@ function randomizeFrame(i) {
 const NODE_W = 420, IMG_W = 220, NODE_GAP = 70;
 const nodeEls = new Map(), nodeRects = new Map();
 const nodesLayer = document.getElementById('nodes');
-let sampleFn = null, sampleImages = false, aiBusy = 0;
+// Who answers Generate: Claude through the viewer's account, or the host's own model (the Figma plugin uses Groq with a
+// key the user saves). A provider is { label, images, json(prompt, { images, signal }) } and, when it needs a key,
+// hasKey() / setKey(key) / clearKey().
+let aiProvider = null, aiBusy = 0;
 const aiOf = (fr) => fr.ai || (fr.ai = { open: false, text: '', img: null });
 const escHtml = (t) => String(t).replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
 const SPARK = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 3c.6 4.2 2.8 6.4 7 7-4.2.6-6.4 2.8-7 7-.6-4.2-2.8-6.4-7-7 4.2-.6 6.4-2.8 7-7zM18.5 2.5c.3 1.6 1 2.4 2.6 2.6-1.6.3-2.4 1-2.6 2.6-.3-1.6-1-2.4-2.6-2.6 1.6-.3 2.4-1 2.6-2.6z"/></svg>';
@@ -3124,18 +3167,32 @@ function nodeLayout(fr) {
   const a = aiOf(fr), y = fr.wy + fr.wh + NODE_GAP;
   return { img: a.img ? { x: fr.wx, y } : null, prompt: { x: fr.wx + (a.img ? IMG_W + 70 : 0), y } };
 }
-function promptNote() {
-  return sampleFn ? (sampleImages ? 'Uses your Claude account. Add an image to borrow its palette and mood.' : 'Uses your Claude account.')
-    : 'AI generation works when Meshdraw is opened in Claude. Roll the dice for a random gradient meanwhile.';
+const needsKey = () => !!(aiProvider && aiProvider.hasKey && !aiProvider.hasKey());
+function promptNote(fr) {
+  if (!aiProvider) return 'AI generation works when Meshdraw is opened in Claude. Roll the dice for a random gradient meanwhile.';
+  if (needsKey()) return `Paste your ${aiProvider.label} API key to generate. It stays on this computer.`;
+  if (fr && aiOf(fr).img && !aiProvider.images) return `Uses ${aiProvider.label}. This model reads text only, so the image isn’t sent.`;
+  return `Uses ${aiProvider.label}.${aiProvider.images ? ' Add an image to borrow its palette and mood.' : ''}`;
 }
 function buildPromptCard(fr) {
   const el = document.createElement('div');
   el.className = 'node prompt';
   el.innerHTML = `<div class="node-head"><i class="node-ic">${SPARK}</i><b>Prompt</b><span class="node-tag"></span><button class="node-x" type="button" aria-label="Close prompt">×</button></div>
     <textarea placeholder="Describe the gradient: colours, mood, motion…" aria-label="Prompt"></textarea>
+    <div class="node-row node-key" hidden><input class="text-in" type="password" placeholder="API key" autocomplete="off" spellcheck="false" aria-label="API key"><button class="btn primary node-save" type="button">Save key</button></div>
     <div class="node-row"><label class="btn file-btn node-add"><input type="file" accept="image/*">Add image</label><button class="btn primary node-go" type="button">Generate</button></div>
-    <p class="node-status"></p>`;
-  const t = el.querySelector('textarea'), go = el.querySelector('.node-go'), file = el.querySelector('input');
+    <div class="node-foot"><p class="node-status"></p><button class="btn link node-forget" type="button" hidden>Change key</button></div>`;
+  const t = el.querySelector('textarea'), go = el.querySelector('.node-go'), file = el.querySelector('input[type=file]'), keyIn = el.querySelector('.node-key input');
+  const saveKey = async () => {
+    const k = keyIn.value.trim();
+    if (!k) return;
+    keyIn.value = '';
+    try { await aiProvider.setKey(k); fr._msg = 'Key saved on this computer.'; } catch (e) { fr._msg = 'The key couldn’t be saved. Try again.'; }
+    renderNodes();
+  };
+  el.querySelector('.node-save').addEventListener('click', saveKey);
+  keyIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); saveKey(); } e.stopPropagation(); });
+  el.querySelector('.node-forget').addEventListener('click', async () => { await aiProvider.clearKey(); fr._msg = ''; renderNodes(); });
   t.value = aiOf(fr).text;
   t.addEventListener('input', () => { aiOf(fr).text = t.value; scheduleSave(); });
   el.querySelector('.node-x').addEventListener('click', () => toggleAi(frames.indexOf(fr)));
@@ -3167,10 +3224,12 @@ function renderNodes() {
     if (set.img) set.img.querySelector('img').src = a.img;
     set.prompt.querySelector('.node-tag').textContent = `→ ${fr.name}`;
     const status = set.prompt.querySelector('.node-status');
-    if (!fr._ctl) status.textContent = fr._msg || promptNote();
+    if (!fr._ctl) status.textContent = fr._msg || promptNote(fr);
     const go = set.prompt.querySelector('.node-go');
     go.textContent = fr._ctl ? 'Stop' : 'Generate';
-    go.disabled = !sampleFn;
+    go.disabled = !aiProvider || needsKey();
+    set.prompt.querySelector('.node-key').hidden = !needsKey();
+    set.prompt.querySelector('.node-forget').hidden = !(aiProvider && aiProvider.clearKey && !needsKey());
     set.prompt.querySelector('.node-add').hidden = !!a.img;
   }
   for (const [id, set] of nodeEls) if (!live.has(id)) { set.prompt.remove(); if (set.img) set.img.remove(); nodeEls.delete(id); nodeRects.delete(id); }
@@ -3253,10 +3312,10 @@ Schema:
  "power": 2.0 to 6.0 (low = soft blends, high = crisp edges between colours),
  "grain": 0 to 0.12, "blur": 0 to 0.3,
  "distort": "none" | "ripple" | "swirl" | "liquid" | "circular" | "fluted", "amount": 0 to 1, "scale": 0 to 1, "animate": true | false,
- "points": [{"x": 0-1, "y": 0-1, "color": "#RRGGBB", "spread": 0.1-1.2, "stretch": 1-10, "angle": 0-180}] (3 to 14 points),
+ "points": [{"x": 0-1, "y": 0-1, "color": "#RRGGBB", "spread": 0.1-1.2, "stretch": 1-10, "angle": 0-180}] (6 to 14 points),
  "paths": [{"color": "#RRGGBB", "spread": 0.05-0.8, "points": [[x, y], ...] (3 to 8 points)}] (0 to 4 paths)}
 
-Guidance: spread is how far a colour reaches (0.5 is about half the frame's short side). stretch above 1 turns a point into a streak along angle (degrees, 0 = horizontal). Paths are ribbons of colour along a smooth curve. "circular" wraps the frame into a radial burst: x becomes the angle and y the distance from the centre, so lay colours out as horizontal bands. "fluted" adds vertical glass ribs, "liquid" a fluid warp, "swirl" a twist and "ripple" rings. Prefer bright, rich colours unless asked otherwise. Avoid plain round blobs: give shape with stretch, paths and distortion.
+Guidance: spread is how far a colour reaches (0.5 is about half the frame's short side). stretch above 1 turns a point into a streak along angle (degrees, 0 = horizontal). Paths are ribbons of colour along a smooth curve. "circular" wraps the frame into a radial burst: x becomes the angle and y the distance from the centre, so lay colours out as horizontal bands. "fluted" adds vertical glass ribs, "liquid" a fluid warp, "swirl" a twist and "ripple" rings. Fill the whole frame with colour: give most points a spread of 0.35 to 0.9, place points near the edges and corners as well as the middle, and pick bg from the palette (not near-black unless the request asks for darkness). Prefer bright, rich colours unless asked otherwise. Avoid small isolated dots and plain round blobs: give shape with stretch, paths and distortion.
 ${withImage ? '\nAn image is attached. Take its palette and mood, and its composition where that suits a gradient.\n' : ''}
 The request: ${JSON.stringify(text || 'A gradient inspired by the image.')}`;
 }
@@ -3289,10 +3348,12 @@ const AI_ERRORS = {
   invalid_json: 'Claude’s answer couldn’t be read. Try again.',
   images_unavailable: 'Images can’t be sent here. Remove the image or try without it.',
   image_rejected: 'That image couldn’t be sent. Try a JPG or PNG.',
+  no_key: 'Add your API key first.',
+  bad_key: 'The API key was rejected. Check it and save it again.',
 };
 async function generate(fr) {
-  if (!sampleFn || fr._ctl) return;
-  const a = aiOf(fr), text = a.text.trim(), withImage = !!a.img && sampleImages;
+  if (!aiProvider || fr._ctl || needsKey()) return;
+  const a = aiOf(fr), text = a.text.trim(), withImage = !!a.img && aiProvider.images;
   const set = nodeEls.get(fr.id), status = set && set.prompt.querySelector('.node-status');
   if (!text && !a.img) { fr._msg = 'Write a prompt or add an image first.'; renderNodes(); return; }
   fr._ctl = new AbortController(); fr._msg = ''; aiBusy++;
@@ -3300,9 +3361,9 @@ async function generate(fr) {
   if (status) status.textContent = 'Thinking…';
   req({});
   try {
-    const opts = { modelTier: 'default', signal: fr._ctl.signal };
+    const opts = { signal: fr._ctl.signal };
     if (withImage) opts.images = [dataUrlBlob(a.img)];
-    const scene = sceneFromAI(await sampleFn.json(aiBrief(fr, text, withImage), opts));
+    const scene = sceneFromAI(await aiProvider.json(aiBrief(fr, text, withImage), opts));
     if (!scene) throw { code: 'invalid_json' };
     const i = frames.indexOf(fr);
     if (i < 0) return;
@@ -3311,17 +3372,19 @@ async function generate(fr) {
     applyScene(scene, `Generated${scene.name ? `: ${scene.name}` : ''}. ${MOD}+Z goes back.`);
     fr._msg = `Done${scene.name ? `: ${scene.name}` : ''}. Edit the prompt and generate again to iterate.`;
   } catch (e) {
-    fr._msg = e && e.code === 'cancelled' ? 'Stopped.' : AI_ERRORS[e && e.code] || 'Generation didn’t work this time. Try again.';
+    fr._msg = e && e.code === 'cancelled' ? 'Stopped.' : AI_ERRORS[e && e.code] || (e && e.message) || 'Generation didn’t work this time. Try again.';
   } finally {
     fr._ctl = null; aiBusy--;
     renderNodes(); req({});
   }
 }
 async function initSample() {
-  sampleFn = await capUse('sample');
-  if (sampleFn && typeof sampleFn.limits === 'function') {
-    try { const l = await sampleFn.limits(); sampleImages = !!(l && l.images); } catch (e) { sampleImages = false; }
-  }
+  if (host && host.ai) { aiProvider = host.ai; renderNodes(); return; }
+  const sample = await capUse('sample');
+  if (!sample) return;
+  let images = false;
+  if (typeof sample.limits === 'function') { try { const l = await sample.limits(); images = !!(l && l.images); } catch (e) { images = false; } }
+  aiProvider = { label: 'your Claude account', images, json: (prompt, opts) => sample.json(prompt, { ...opts, modelTier: 'default' }) };
   renderNodes();
 }
 
@@ -4690,7 +4753,7 @@ function framePixels(fr, w, h) {
   return out;
 }
 function exportSize(fr, scale) {
-  const max = Math.min(gl.getParameter(gl.MAX_TEXTURE_SIZE), gl.getParameter(gl.MAX_RENDERBUFFER_SIZE));
+  const max = Math.min(gl.getParameter(gl.MAX_TEXTURE_SIZE), gl.getParameter(gl.MAX_RENDERBUFFER_SIZE), (host && host.maxSize) || Infinity);
   const [nw, nh] = frameSize(fr);
   const w = nw * scale, h = nh * scale, k = Math.min(1, max / w, max / h, Math.sqrt(16e6 / (w * h)));
   return [Math.max(1, Math.floor(w * k)), Math.max(1, Math.floor(h * k))];
@@ -4716,7 +4779,7 @@ let exportLen = 4;
 const canMove = (fr) => (fr === frames[active] ? settings : fr.look).distort !== 'none';
 function motionSize(fr) {
   const [nw, nh] = frameSize(fr), long = MOTION[exportFmt].sizes[exportScale - 1];
-  const k = Math.min(1, 4096 / long) * long / Math.max(nw, nh);
+  const k = Math.min(1, ((host && host.maxSize) || 4096) / long) * long / Math.max(nw, nh);
   const even = (v) => Math.max(2, Math.round(v / 2) * 2);
   return [even(nw * k), even(nh * k)];
 }
@@ -4985,11 +5048,18 @@ const safeName = (s) => (s || 'frame').trim().replace(/[\\/:*?"<>|]+/g, '-').rep
 const exportPicked = new Set();
 let exportFmt = 'png', exportScope = 'one', exportScale = 2, exportURL = null, exportJob = 0, exportText = '', exportBlob = null;
 for (const [k, f] of Object.entries(FORMATS)) {
+  if (host && host.formats && !host.formats.includes(k)) continue;
   const b = document.createElement('button');
   b.type = 'button'; b.dataset.f = k; b.setAttribute('aria-pressed', String(k === exportFmt));
   b.innerHTML = `<b>${f.name}</b><span>${f.sub}</span>`;
   b.addEventListener('click', () => { exportFmt = k; refreshExport(); });
   ui.exportFormat.appendChild(b);
+}
+const dlLabel = () => (host && host.actionLabel ? host.actionLabel(exportFmt, exportTargets().length) : 'Download');
+if (host) {
+  ui.exportBtn.textContent = host.exportLabel || 'Export';
+  $('#exportTitle').textContent = host.exportLabel || 'Export';
+  $('label[for="exportName"]').textContent = 'Layer name';
 }
 function exportTargets() {
   storeActive();
@@ -5020,6 +5090,7 @@ function renderPick() {
   });
 }
 function fmtNote() {
+  if (host && host.notes && host.notes[exportFmt]) return host.notes[exportFmt];
   const n = exportTargets().length, all = n > 1;
   return {
     png: all ? `Each frame as a PNG, packed in a ZIP.` : 'Lossless image with the exact gradient and grain.',
@@ -5064,6 +5135,8 @@ async function refreshExport() {
   ui.copyBtn.textContent = exportFmt === 'png' ? 'Copy image' : `Copy ${fmt.name}`;
   ui.dlBtn.hidden = exportFmt === 'css' && inViewer;
   ui.exportHow.textContent = exportFmt === 'css' && inViewer ? ' · Copy the CSS into your stylesheet.' : fmt.raster ? ' · Right-click the preview to save it as an image too.' : '';
+  ui.dlBtn.textContent = dlLabel();
+  if (host) { ui.dlBtn.hidden = false; ui.copyBtn.hidden = true; ui.exportHow.textContent = ''; }
   if (fmt.motion) {
     const movers = targets.filter(canMove), pf = movers.includes(fr) ? fr : movers[0];
     if (!movers.length || (exportFmt === 'mp4' && !canMp4())) {
@@ -5113,6 +5186,7 @@ async function downloadExport() {
   let name = ui.exportName.value.trim() || 'meshdraw';
   ui.dlBtn.disabled = true; ui.dlBtn.textContent = 'Preparing…';
   try {
+    if (host) { await placeInHost(targets); return; }
     let blob;
     const many = targets.length > 1, enc = new TextEncoder();
     if (fmt.motion) {
@@ -5157,8 +5231,30 @@ async function downloadExport() {
     console.error(e);
     toast(FORMATS[exportFmt].motion ? 'The animation couldn’t be rendered here. Try a smaller size or GIF.' : 'Export failed. Try a smaller size.');
   } finally {
-    ui.dlBtn.disabled = false; ui.dlBtn.textContent = 'Download';
+    ui.dlBtn.disabled = false; ui.dlBtn.textContent = dlLabel();
   }
+}
+// Hands one finished render per frame to the host instead of saving files. SVG sends the colour grid, so the host can
+// build its own vector layers from it.
+async function placeInHost(targets) {
+  const list = FORMATS[exportFmt].motion ? targets.filter(canMove) : targets, items = [];
+  for (const [k, f] of list.entries()) {
+    const progress = (i, n) => { ui.dlBtn.textContent = `Rendering ${list.length > 1 ? `${k + 1}/${list.length} · ` : ''}${Math.round((i / n) * 100)}%`; };
+    const typed = ui.exportName.value.trim().replace(/\.[a-z0-9]+$/i, '');
+    const item = { name: list.length > 1 || !typed ? f.name : typed, format: exportFmt, size: frameSize(f), link: f.link || null, data: frameData(f) };
+    if (exportFmt === 'svg') item.grid = meshGrid(f);
+    else {
+      const blob = exportFmt === 'gif' ? await encodeGif(f, progress) : exportFmt === 'mp4' ? await encodeMp4(f, progress)
+        : (await frameImage(f, exportScale, exportFmt === 'png' ? 'image/png' : 'image/jpeg')).blob;
+      item.bytes = new Uint8Array(await blob.arrayBuffer());
+    }
+    items.push(item);
+  }
+  ui.dlBtn.textContent = 'Adding…';
+  const res = (await host.place(items)) || {};
+  (res.links || []).forEach((l, i) => { if (l && list[i]) list[i].link = l; });
+  if (res.message) toast(res.message);
+  scheduleSave();
 }
 function dedupeNames(files) {
   const seen = {};
@@ -5232,6 +5328,7 @@ if (!hadSave) {
   }
   active = 0; loadActive(); layout(); fitFrame(); applyView(true);
 }
+if (host && host.open) openFromHost(host.open);
 setPanel(panelOpen);
 try { const r = localStorage.getItem(REF_KEY); if (r) useRefImage(r, false); } catch (e) { /* no stored reference */ }
 updateWell(); syncAll(); setTool('select', false);
