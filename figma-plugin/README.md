@@ -41,6 +41,14 @@ On another machine, import `figma-plugin/manifest.json` with **Plugins → Devel
 - `build.js`: assembles `ui.html` from `../meshdraw.html` and `bridge.js`. Rebuild after changing the editor.
 - `test/run.js`: an end-to-end test against a stand-in for Figma's API, in headless Chrome. It covers opening a layer, image fills, gradient layers, the key flow, a live Groq call (if a key is in `GROQ_API_KEY` or `../.env`) and re-editing.
 
-## Before publishing to the Community
+## Publishing to the Figma Community
 
-- Each user brings their own Groq key. To offer AI without that, put your key behind a small server, such as a Cloudflare Worker, and call that instead. Never ship a key inside the plugin.
+Everything for the listing is in `publish/`: `icon.png` (128 × 128), `cover.png` (1920 × 960) and the listing text in `LISTING.md`.
+
+To regenerate the artwork from the editor, run `node figma-plugin/publish/make-art.js`, then `node figma-plugin/publish/compose.js`.
+
+1. In the Figma desktop app: **Plugins → Development → right-click MeshGradient → Publish…**
+2. Upload the icon and cover, then paste the name, tagline, description, tags and network-access notes from `LISTING.md`.
+3. Submit for review. Figma usually answers within days, sometimes a couple of weeks. Once approved, anyone can install it from the Community. Later changes go out with **Publish new version**.
+
+Each user brings their own Groq key. To offer AI without that, put a key behind a small server, such as a Cloudflare Worker, and call that instead. Never ship a key inside the plugin.
