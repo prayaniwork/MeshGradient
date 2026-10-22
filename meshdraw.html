@@ -307,6 +307,23 @@ kbd{display:inline-block;min-width:18px;padding:2px 5px;border-radius:5px;backgr
 .code{width:100%;height:132px;resize:vertical;border-radius:10px;border:1px solid var(--line);background:var(--fill);color:var(--ink);font:500 10.5px/1.5 var(--font-mono);padding:9px 10px;white-space:pre;overflow:auto}
 .export-meta{margin:0;font-size:12px;color:var(--ink-2)}
 .mono{font-family:var(--font-mono);font-variant-numeric:tabular-nums;color:var(--ink)}
+/* AI nodes: cards that live on the canvas below their frame and zoom with it */
+#nodes{position:absolute;inset:0;pointer-events:none;z-index:2;overflow:hidden}
+.node{position:absolute;left:0;top:0;transform-origin:0 0;pointer-events:auto;width:420px;padding:14px;border-radius:18px;display:flex;flex-direction:column;gap:10px;background:var(--float);-webkit-backdrop-filter:blur(24px) saturate(1.6);backdrop-filter:blur(24px) saturate(1.6);box-shadow:var(--shadow),inset 0 0 0 1px var(--rim),inset 0 1px 0 var(--rim-top);color:var(--ink)}
+.node.image{width:220px}
+.node-head{display:flex;align-items:center;gap:8px;min-width:0}
+.node-head b{font-weight:600;font-size:13px}
+.node-ic svg{display:block;width:16px;height:16px;fill:var(--accent)}
+.node-tag{flex:1;min-width:0;font:500 11px var(--font-mono);color:var(--ink-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.node.image .node-head b{flex:1}
+.node-x{width:24px;height:24px;border:0;border-radius:7px;background:none;color:var(--ink-3);font-size:17px;line-height:1;cursor:pointer;flex:none}
+.node-x:hover{background:var(--fill-2);color:var(--ink)}
+.node textarea{width:100%;min-height:92px;resize:none;border-radius:12px;border:1px solid var(--line);background:var(--fill);color:var(--ink);padding:10px 12px;font:400 14px/1.45 var(--font-ui)}
+.node textarea:focus{outline:2px solid var(--accent);outline-offset:-1px}
+.node-row{display:flex;gap:8px}
+.node-row .btn{height:34px}
+.node img{display:block;width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:10px}
+.node-status{margin:0;font-size:12px;line-height:1.4;color:var(--ink-2);min-height:1.4em;text-wrap:pretty}
 .nogl{position:absolute;inset:0;display:grid;place-items:center;padding-left:var(--gl);padding-right:var(--gr)}
 .nogl .float{padding:20px;max-width:380px;border-radius:16px}
 
@@ -334,6 +351,7 @@ kbd{display:inline-block;min-width:18px;padding:2px 5px;border-radius:5px;backgr
 <div id="app">
   <canvas id="gl"></canvas>
   <canvas id="overlay" aria-label="Gradient canvas"></canvas>
+  <div id="nodes" aria-label="AI nodes"></div>
 
   <header class="brand glass">
     <span class="mark" aria-hidden="true"></span>
@@ -2177,6 +2195,7 @@ function req(f = {}) {
 const interacting = () => performance.now() - lastInteract < 150;
 function frame() {
   raf = 0;
+  if (aiBusy) need.ov = true;
   if (!gl || gl.isContextLost() || !hiSet) return;
   const flow = flowing();
   if (flow) {
@@ -2204,7 +2223,7 @@ function frame() {
   if (!interacting() && refreshOneCache()) { need.compose = true; more = true; }
   if (need.compose) { compose(); need.compose = false; }
   if (need.ov) { drawOverlay(); need.ov = false; }
-  if (flow || more) raf = requestAnimationFrame(frame);
+  if (flow || more || aiBusy) raf = requestAnimationFrame(frame);
   else if (interacting()) setTimeout(() => req({}), 160);
 }
 
@@ -2240,6 +2259,7 @@ function applyView(force) {
   geoDirty = true;
   ui.zoomVal.textContent = Math.round(view.z * 100) + '%';
   if (coachKey && !ui.coach.hidden) placeFloat(ui.coach, coachAnchor(coachKey));
+  positionNodes();
 }
 function zoomTo(rect, pad) {
   const a = viewArea();
@@ -2284,6 +2304,7 @@ function measureGlass() {
     glassRects.push({ x: r.left - ar.left, y: r.top - ar.top, w: r.width, h: r.height, r: Math.min(parseFloat(cs.borderTopLeftRadius) || 0, r.width / 2, r.height / 2) });
   }
   req({ view: true });
+  positionNodes();
 }
 function readTheme() {
   const cs = getComputedStyle(document.documentElement);
@@ -2493,7 +2514,7 @@ function drawPenOverlay() {
 // Frame names sit above each frame on the pasteboard; the selected one is in the accent colour.
 function drawFrameLabels() {
   const c = octx;
-  labelRects = [];
+  labelRects = []; iconRects = [];
   c.textBaseline = 'alphabetic';
   frames.forEach((fr, i) => {
     const r = i === active ? { x: BX, y: BY, w: W, h: H } : frameRect(fr);
@@ -2509,15 +2530,43 @@ function drawFrameLabels() {
     c.font = '500 12px Geist, system-ui, sans-serif';
     let name = fr.name;
     const size = `${cw} × ${ch}`;
-    const maxW = Math.max(20, r.w - (r.w > 200 ? 90 : 0));
+    const tools = r.w >= 120, maxW = Math.max(20, r.w - (r.w > 200 ? 90 : 0) - (tools ? 56 : 0));
     while (name.length > 1 && c.measureText(name).width > maxW) name = name.slice(0, -2) + '…';
     c.fillStyle = i === active ? labelAccent : labelInk;
     c.fillText(name, r.x, y);
     const nw = c.measureText(name).width;
     if (r.w > 200) { c.font = '500 11px "Geist Mono", ui-monospace, monospace'; c.fillStyle = labelInk; c.globalAlpha = 0.75; c.fillText(size, r.x + nw + 8, y); c.globalAlpha = 1; }
     labelRects.push({ i, x: r.x - 2, y: y - 14, w: nw + 6, h: 20 });
+    if (tools) {
+      drawLabelIcon('ai', i, r.x + r.w - 22, r.y - 28, !!(fr.ai && fr.ai.open));
+      drawLabelIcon('dice', i, r.x + r.w - 48, r.y - 28, false);
+    }
   });
+  drawConnectors();
 }
+// Small buttons at the right end of each frame's label row: roll a random gradient, and open the AI prompt node.
+let iconRects = [], hoverIcon = '';
+function drawLabelIcon(kind, i, x, y, on) {
+  const c = octx, hot = hoverIcon === kind + i, s = 22;
+  iconRects.push({ kind, i, x, y, w: s, h: s });
+  if (hot || on) {
+    c.fillStyle = on ? labelAccent : 'rgba(127,127,140,.22)';
+    c.globalAlpha = on && !hot ? 0.22 : on ? 0.35 : 1;
+    c.beginPath(); if (c.roundRect) c.roundRect(x, y, s, s, 6); else c.rect(x, y, s, s); c.fill();
+    c.globalAlpha = 1;
+  }
+  c.strokeStyle = c.fillStyle = on || hot ? labelAccent : labelInk;
+  c.lineWidth = 1.4; c.lineJoin = 'round';
+  const cx = x + s / 2, cy = y + s / 2;
+  if (kind === 'dice') {
+    c.beginPath(); if (c.roundRect) c.roundRect(cx - 6.5, cy - 6.5, 13, 13, 3); else c.rect(cx - 6.5, cy - 6.5, 13, 13); c.stroke();
+    for (const [dx, dy] of [[-3, -3], [3, 3], [0, 0], [3, -3], [-3, 3]]) { c.beginPath(); c.arc(cx + dx, cy + dy, 1.15, 0, TAU); c.fill(); }
+  } else {
+    const star = (px, py, R) => { c.beginPath(); c.moveTo(px, py - R); c.quadraticCurveTo(px, py, px + R, py); c.quadraticCurveTo(px, py, px, py + R); c.quadraticCurveTo(px, py, px - R, py); c.quadraticCurveTo(px, py, px, py - R); c.fill(); };
+    star(cx - 1.5, cy + 1, 6.5); star(cx + 5, cy - 5, 3);
+  }
+}
+const iconAt = (sx, sy) => iconRects.find((r) => sx >= r.x && sy >= r.y && sx <= r.x + r.w && sy <= r.y + r.h) || null;
 function drawOverlay() {
   const c = octx;
   c.setTransform(1, 0, 0, 1, 0, 0);
@@ -2692,6 +2741,7 @@ function save() {
   try {
     localStorage.setItem(KEY, JSON.stringify({
       frames: frames.map((fr) => ({ id: fr.id, name: fr.name, look: fr.look, presetKey: fr.presetKey, customPalette: fr.customPalette,
+        ai: fr.ai && (fr.ai.open || fr.ai.text || fr.ai.img) ? { open: fr.ai.open, text: fr.ai.text, img: fr.ai.img } : null,
         stops: JSON.parse(JSON.stringify(fr.stops, strip)), grid: fr.grid, warp: fr.warp ? f32ToB64(fr.warp) : null })),
       active, view, panelOpen, newColor,
       app: { brush: settings.brush, strength: settings.strength, refShow: settings.refShow, refOpacity: settings.refOpacity, refFit: settings.refFit },
@@ -2730,6 +2780,7 @@ function load() {
         customPalette: Array.isArray(f.customPalette) && f.customPalette.every(normHex) ? f.customPalette.map(normHex) : null,
         stops: f.stops.map((s) => ({ ...s, id: uid++, color: normHex(s.color), blend: BLEND_IDX[s.blend] != null ? s.blend : 'normal', opacity: isFinite(s.opacity) ? s.opacity : 1, soft: isFinite(s.soft) ? s.soft : 0.5 })),
         grid: g, warp: f.warp ? b64ToF32(f.warp) : null, undo: [], redo: [], cacheDirty: true,
+        ai: f.ai && typeof f.ai === 'object' ? { open: !!f.ai.open, text: String(f.ai.text || '').slice(0, 2000), img: typeof f.ai.img === 'string' && f.ai.img.startsWith('data:image/') ? f.ai.img : null } : null,
       });
     }
     if (!list.length) return false;
@@ -2912,7 +2963,7 @@ function loadActive() {
 }
 function syncAll() {
   renderPresets(); renderPalette(); syncSettingsUI(); syncCanvasUI(); syncMeshUI(); syncRefUI(); syncInspector();
-  updateHistoryButtons(); renderFrames(); updateHint(); updateCount();
+  updateHistoryButtons(); renderFrames(); updateHint(); updateCount(); renderNodes();
 }
 function activateFrame(j, zoom) {
   if (!frames[j]) return;
@@ -2941,15 +2992,15 @@ function addFrame(fr, at) {
   activateFrame(at, false);
   return true;
 }
+// New frames start blank (white, no grain) at the selected frame's size.
 function newFrame() {
-  const used = new Set(frames.map((f) => f.presetKey));
-  const key = PRESET_KEYS.find((k) => !used.has(k)) || PRESET_KEYS[frames.length % PRESET_KEYS.length];
   const cur = pickLook(settings);
-  if (!addFrame(makeFrame(PRESETS[key].name, { canvas: cur.canvas, cw: cur.cw, ch: cur.ch }), frames.length)) return;
-  loadPreset(key);
+  let n = frames.length + 1;
+  while (frames.some((f) => f.name === `Frame ${n}`)) n++;
+  if (!addFrame(makeFrame(`Frame ${n}`, { canvas: cur.canvas, cw: cur.cw, ch: cur.ch, bg: '#FFFFFF', grain: 0 }), frames.length)) return;
   undoStack = []; redoStack = []; updateHistoryButtons();
   fitFrame();
-  toast(`${PRESETS[key].name} frame added`);
+  toast('Blank frame added. Draw, roll the dice, or prompt it.');
 }
 function duplicateFrame() {
   storeActive();
@@ -2996,6 +3047,283 @@ function frameColors(fr) {
   const list = fr === frames[active] ? (isGrid() ? grid.v.map((v) => v.color) : stops.map((s) => s.color)) : fr.look.mode === 'grid' && fr.grid ? fr.grid.v.map((v) => v.color) : fr.stops.map((s) => s.color);
   return [...new Set(list)].slice(0, 4);
 }
+// ---------------------------------------------------------------- random scenes
+const rnd = (a, b) => a + Math.random() * (b - a);
+const pickOne = (list) => list[Math.floor(Math.random() * list.length)];
+const lchHex = (L, C, h) => oklabToHex([L, C * Math.cos((h * Math.PI) / 180), C * Math.sin((h * Math.PI) / 180)]);
+// A bright colour harmony around a random hue, then 4–7 points, up to two ribbons and a random finish.
+function randomScene() {
+  const h0 = rnd(0, 360);
+  const offsets = pickOne([[0, 30, 60, -30], [0, 180, 25, 205], [0, 120, 240, 20], [0, 150, 210, 30], [0, 15, -15, 40]]);
+  const palette = offsets.flatMap((o) => [lchHex(rnd(0.62, 0.9), rnd(0.12, 0.22), h0 + o), lchHex(rnd(0.8, 0.97), rnd(0.04, 0.11), h0 + o + rnd(-12, 12))]);
+  const spots = [];
+  for (let tries = 0; spots.length < 4 + Math.floor(Math.random() * 4) && tries < 400; tries++) {
+    const x = rnd(0.04, 0.96), y = rnd(0.04, 0.96);
+    if (spots.every(([a, b]) => Math.hypot(a - x, b - y) > 0.2)) spots.push([x, y]);
+  }
+  const items = spots.map(([x, y], i) => P(x, y, palette[(i * 3) % palette.length], rnd(0.3, 0.75), Math.random() < 0.4 ? rnd(2, 7) : 1, rnd(0, 180)));
+  for (let k = Math.floor(Math.random() * 3); k > 0; k--) {
+    const y0 = rnd(0.2, 0.8), guide = [];
+    for (let j = 0; j < 5; j++) guide.push([0.05 + j * 0.225, clamp(y0 + rnd(-0.22, 0.22), 0.05, 0.95)]);
+    items.push(PATH(palette[Math.floor(Math.random() * palette.length)], rnd(0.12, 0.4), guide));
+  }
+  const distort = Math.random() < 0.45 ? 'none' : pickOne(['ripple', 'swirl', 'liquid', 'fluted', 'circular']);
+  return {
+    palette: palette.slice(0, 8), bg: palette[1], items,
+    look: { mode: Math.random() < 0.15 ? 'radial' : 'freeform', power: rnd(2.4, 4.8), grain: rnd(0.03, 0.1), blur: Math.random() < 0.3 ? rnd(0.03, 0.12) : 0,
+      bands: 0, distort, amount: rnd(0.25, 0.8), scale: rnd(0.2, 0.75), flow: distort !== 'none' && Math.random() < 0.5 },
+  };
+}
+// Puts a generated scene into the selected frame as one undo step.
+function applyScene(scene, message) {
+  pushUndo();
+  customPalette = scene.palette && scene.palette.length ? scene.palette.slice(0, 8) : null;
+  Object.assign(settings, SCENE_LOOK, scene.look, { bg: scene.bg });
+  stops = buildStops({ build: () => scene.items });
+  grid = null; gridDirty = true;
+  resetWarp();
+  sel = null; gsel = -1; hover = null;
+  renderPresets(); renderPalette(); syncSettingsUI(); syncInspector(); syncMeshUI(); renderFrames();
+  req({ scene: true, warp: true, mesh: true, gl: true });
+  scheduleSave();
+  if (message) toast(message);
+}
+function randomizeFrame(i) {
+  activateFrame(i, false);
+  applyScene(randomScene(), `Random gradient. ${MOD}+Z goes back.`);
+}
+
+// ---------------------------------------------------------------- AI prompt nodes
+// Like a Weave graph on the canvas: below a frame sits a prompt node, wired into the frame, and an optional image node
+// wired into the prompt. Generate asks Claude, on the viewer's own Claude account, to compose a scene from the words and
+// the image; the answer is checked and drawn as ordinary points and paths, so it stays editable.
+const NODE_W = 420, IMG_W = 220, NODE_GAP = 70;
+const nodeEls = new Map(), nodeRects = new Map();
+const nodesLayer = document.getElementById('nodes');
+let sampleFn = null, sampleImages = false, aiBusy = 0;
+const aiOf = (fr) => fr.ai || (fr.ai = { open: false, text: '', img: null });
+const escHtml = (t) => String(t).replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+const SPARK = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 3c.6 4.2 2.8 6.4 7 7-4.2.6-6.4 2.8-7 7-.6-4.2-2.8-6.4-7-7 4.2-.6 6.4-2.8 7-7zM18.5 2.5c.3 1.6 1 2.4 2.6 2.6-1.6.3-2.4 1-2.6 2.6-.3-1.6-1-2.4-2.6-2.6 1.6-.3 2.4-1 2.6-2.6z"/></svg>';
+
+function toggleAi(i) {
+  const fr = frames[i], a = aiOf(fr);
+  a.open = !a.open;
+  activateFrame(i, false);
+  renderNodes();
+  if (a.open) {
+    const w = Math.max(fr.ww, (a.img ? IMG_W + 70 : 0) + NODE_W);
+    zoomTo({ x: fr.wx, y: fr.wy, w, h: fr.wh + NODE_GAP + 300 }, 40);
+    const t = nodeEls.get(fr.id) && nodeEls.get(fr.id).prompt.querySelector('textarea');
+    if (t) setTimeout(() => t.focus(), 50);
+  }
+  scheduleSave(); req({});
+}
+// World positions of a frame's nodes: the image node first, then the prompt node, in a row below the frame.
+function nodeLayout(fr) {
+  const a = aiOf(fr), y = fr.wy + fr.wh + NODE_GAP;
+  return { img: a.img ? { x: fr.wx, y } : null, prompt: { x: fr.wx + (a.img ? IMG_W + 70 : 0), y } };
+}
+function promptNote() {
+  return sampleFn ? (sampleImages ? 'Uses your Claude account. Add an image to borrow its palette and mood.' : 'Uses your Claude account.')
+    : 'AI generation works when Meshdraw is opened in Claude. Roll the dice for a random gradient meanwhile.';
+}
+function buildPromptCard(fr) {
+  const el = document.createElement('div');
+  el.className = 'node prompt';
+  el.innerHTML = `<div class="node-head"><i class="node-ic">${SPARK}</i><b>Prompt</b><span class="node-tag"></span><button class="node-x" type="button" aria-label="Close prompt">×</button></div>
+    <textarea placeholder="Describe the gradient: colours, mood, motion…" aria-label="Prompt"></textarea>
+    <div class="node-row"><label class="btn node-add"><input type="file" accept="image/*">Add image</label><button class="btn primary node-go" type="button">Generate</button></div>
+    <p class="node-status"></p>`;
+  const t = el.querySelector('textarea'), go = el.querySelector('.node-go'), file = el.querySelector('input');
+  t.value = aiOf(fr).text;
+  t.addEventListener('input', () => { aiOf(fr).text = t.value; scheduleSave(); });
+  el.querySelector('.node-x').addEventListener('click', () => toggleAi(frames.indexOf(fr)));
+  file.addEventListener('change', () => { attachImage(fr, file.files[0]); file.value = ''; });
+  go.addEventListener('click', () => (fr._ctl ? fr._ctl.abort() : generate(fr)));
+  el.addEventListener('dragover', (e) => { e.preventDefault(); e.stopPropagation(); });
+  el.addEventListener('dragenter', (e) => { e.preventDefault(); e.stopPropagation(); });
+  el.addEventListener('drop', (e) => { e.preventDefault(); e.stopPropagation(); attachImage(fr, e.dataTransfer.files[0]); });
+  return el;
+}
+function buildImageCard(fr) {
+  const el = document.createElement('div');
+  el.className = 'node image';
+  el.innerHTML = `<div class="node-head"><b>Image</b><button class="node-x" type="button" aria-label="Remove image">×</button></div><img alt="Image for the prompt">`;
+  el.querySelector('.node-x').addEventListener('click', () => { aiOf(fr).img = null; renderNodes(); scheduleSave(); });
+  return el;
+}
+// Keeps one set of cards per frame with an open prompt node, in sync with the frames and their state.
+function renderNodes() {
+  const live = new Set();
+  for (const fr of frames) {
+    const a = fr.ai;
+    if (!a || !a.open) continue;
+    live.add(fr.id);
+    let set = nodeEls.get(fr.id);
+    if (!set) { set = { prompt: buildPromptCard(fr), img: null }; nodesLayer.appendChild(set.prompt); nodeEls.set(fr.id, set); }
+    if (a.img && !set.img) { set.img = buildImageCard(fr); nodesLayer.appendChild(set.img); }
+    if (!a.img && set.img) { set.img.remove(); set.img = null; }
+    if (set.img) set.img.querySelector('img').src = a.img;
+    set.prompt.querySelector('.node-tag').textContent = `→ ${fr.name}`;
+    const status = set.prompt.querySelector('.node-status');
+    if (!fr._ctl) status.textContent = fr._msg || promptNote();
+    const go = set.prompt.querySelector('.node-go');
+    go.textContent = fr._ctl ? 'Stop' : 'Generate';
+    go.disabled = !sampleFn;
+    set.prompt.querySelector('.node-add').hidden = !!a.img;
+  }
+  for (const [id, set] of nodeEls) if (!live.has(id)) { set.prompt.remove(); if (set.img) set.img.remove(); nodeEls.delete(id); nodeRects.delete(id); }
+  positionNodes();
+}
+// Places the cards with the canvas zoom and pan, and cuts them away under the glass panels.
+function positionNodes() {
+  if (!nodesLayer) return;
+  for (const fr of frames) {
+    const set = nodeEls.get(fr.id);
+    if (!set) continue;
+    const lay = nodeLayout(fr), rects = {};
+    for (const [key, el] of [['prompt', set.prompt], ['img', set.img]]) {
+      if (!el) continue;
+      const [x, y] = worldToScreen(lay[key].x, lay[key].y), z = view.z;
+      el.style.display = z < 0.08 ? 'none' : '';
+      el.style.transform = `translate(${x}px, ${y}px) scale(${z})`;
+      const w = el.offsetWidth, h = el.offsetHeight, holes = [];
+      for (const g of glassRects) {
+        const hx = (g.x - x) / z, hy = (g.y - y) / z, hw = g.w / z, hh = g.h / z;
+        if (hx < w && hy < h && hx + hw > 0 && hy + hh > 0) holes.push(`M${hx} ${hy}h${hw}v${hh}h${-hw}Z`);
+      }
+      el.style.clipPath = holes.length ? `path(evenodd, 'M-40 -40H${w + 40}V${h + 40}H-40Z ${holes.join(' ')}')` : '';
+      rects[key] = { x, y, w: w * z, h: h * z };
+    }
+    nodeRects.set(fr.id, rects);
+  }
+}
+if (nodesLayer) nodesLayer.addEventListener('wheel', (e) => {
+  if (e.target.tagName === 'TEXTAREA' && e.target.scrollHeight > e.target.clientHeight && !e.ctrlKey && !e.metaKey) return;
+  e.preventDefault();
+  ovc.dispatchEvent(new WheelEvent('wheel', e));
+}, { passive: false });
+// Wires drawn on the canvas: image → prompt → frame, with a moving dash while Claude is working.
+function drawConnectors() {
+  const c = octx;
+  for (const fr of frames) {
+    const rects = nodeEls.has(fr.id) && nodeRects.get(fr.id);
+    if (!rects || !rects.prompt) continue;
+    const i = frames.indexOf(fr), r = i === active ? { x: BX, y: BY, w: W, h: H } : frameRect(fr), P = rects.prompt;
+    const wire = (ax, ay, bx, by, vertical) => {
+      c.beginPath(); c.moveTo(ax, ay);
+      if (vertical) { const m = (ay - by) / 2; c.bezierCurveTo(ax, ay - m, bx, by + m, bx, by); }
+      else { const m = (bx - ax) / 2; c.bezierCurveTo(ax + m, ay, bx - m, by, bx, by); }
+      c.setLineDash(fr._ctl ? [7, 7] : []); c.lineDashOffset = fr._ctl ? -((performance.now() / 25) % 14) : 0;
+      c.strokeStyle = labelAccent; c.lineWidth = 2; c.stroke(); c.setLineDash([]);
+      for (const [px, py] of [[ax, ay], [bx, by]]) { c.beginPath(); c.arc(px, py, 4.5, 0, TAU); c.fillStyle = `rgb(${pasteRgb.map((v) => Math.round(v * 255)).join(',')})`; c.fill(); c.lineWidth = 2; c.stroke(); }
+    };
+    const px = P.x + P.w / 2;
+    wire(px, P.y, clamp(px, r.x + 24, r.x + r.w - 24), r.y + r.h, true);
+    if (rects.img) { const I = rects.img; wire(I.x + I.w, I.y + I.h / 2, P.x, P.y + Math.min(P.h / 2, 60 * view.z), false); }
+  }
+}
+function attachImage(fr, file) {
+  if (!file || !/^image\//.test(file.type)) { toast('Choose an image file, such as a PNG or JPG.'); return; }
+  const url = URL.createObjectURL(file), img = new Image();
+  img.onload = () => {
+    const k = Math.min(1, 768 / Math.max(img.naturalWidth, img.naturalHeight)), cv = document.createElement('canvas');
+    cv.width = Math.max(1, Math.round(img.naturalWidth * k)); cv.height = Math.max(1, Math.round(img.naturalHeight * k));
+    cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+    URL.revokeObjectURL(url);
+    aiOf(fr).img = cv.toDataURL('image/jpeg', 0.86);
+    renderNodes(); scheduleSave(); req({});
+  };
+  img.onerror = () => { URL.revokeObjectURL(url); toast('That file could not be opened as an image.'); };
+  img.src = url;
+}
+const dataUrlBlob = (u) => { const [h, b] = u.split(','), bin = atob(b), arr = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i); return new Blob([arr], { type: h.slice(5, h.indexOf(';')) }); };
+function aiBrief(fr, text, withImage) {
+  const [cw, ch] = frameSize(fr);
+  return `You design mesh gradients for an editor called Meshdraw. Reply with ONLY one JSON object, no prose.
+
+The frame is ${cw}×${ch} px. Coordinates are fractions of the frame: x from 0 (left) to 1 (right), y from 0 (top) to 1 (bottom).
+In "freeform" mode every colour point and path blends with the others by distance, in OKLab. In "radial" mode each point is a soft round glow stacked over the base colour, later points on top.
+
+Schema:
+{"name": "2-3 word title",
+ "bg": "#RRGGBB" base colour,
+ "mode": "freeform" | "radial",
+ "power": 2.0 to 6.0 (low = soft blends, high = crisp edges between colours),
+ "grain": 0 to 0.12, "blur": 0 to 0.3,
+ "distort": "none" | "ripple" | "swirl" | "liquid" | "circular" | "fluted", "amount": 0 to 1, "scale": 0 to 1, "animate": true | false,
+ "points": [{"x": 0-1, "y": 0-1, "color": "#RRGGBB", "spread": 0.1-1.2, "stretch": 1-10, "angle": 0-180}] (3 to 14 points),
+ "paths": [{"color": "#RRGGBB", "spread": 0.05-0.8, "points": [[x, y], ...] (3 to 8 points)}] (0 to 4 paths)}
+
+Guidance: spread is how far a colour reaches (0.5 is about half the frame's short side). stretch above 1 turns a point into a streak along angle (degrees, 0 = horizontal). Paths are ribbons of colour along a smooth curve. "circular" wraps the frame into a radial burst: x becomes the angle and y the distance from the centre, so lay colours out as horizontal bands. "fluted" adds vertical glass ribs, "liquid" a fluid warp, "swirl" a twist and "ripple" rings. Prefer bright, rich colours unless asked otherwise. Avoid plain round blobs: give shape with stretch, paths and distortion.
+${withImage ? '\nAn image is attached. Take its palette and mood, and its composition where that suits a gradient.\n' : ''}
+The request: ${JSON.stringify(text || 'A gradient inspired by the image.')}`;
+}
+// Turns Claude's JSON into a scene, keeping only valid values within the editor's ranges.
+function sceneFromAI(d) {
+  if (!d || typeof d !== 'object') return null;
+  const num = (v, a, b, def) => (isFinite(+v) ? clamp(+v, a, b) : def), hex = (v) => normHex(v);
+  const items = [];
+  for (const q of (Array.isArray(d.points) ? d.points : []).slice(0, 16)) {
+    const color = hex(q && q.color);
+    if (color) items.push(P(num(q.x, 0, 1, 0.5), num(q.y, 0, 1, 0.5), color, num(q.spread, 0.05, 2.5, 0.5), num(q.stretch, 1, 12, 1), num(q.angle, 0, 180, 0)));
+  }
+  for (const q of (Array.isArray(d.paths) ? d.paths : []).slice(0, 5)) {
+    const color = hex(q && q.color), guide = (Array.isArray(q && q.points) ? q.points : []).filter((v) => Array.isArray(v) && isFinite(v[0]) && isFinite(v[1])).slice(0, 10).map(([x, y]) => [clamp(+x, 0, 1), clamp(+y, 0, 1)]);
+    if (color && guide.length >= 2) items.push(PATH(color, num(q.spread, 0.05, 1.5, 0.3), guide));
+  }
+  if (items.length < 2) return null;
+  const distort = DISTORTS[d.distort] ? d.distort : 'none';
+  const colors = [...new Set(items.map((s) => s.color))];
+  return {
+    name: typeof d.name === 'string' ? d.name.trim().slice(0, 40) : '',
+    palette: colors.slice(0, 8), bg: hex(d.bg) || colors[0], items,
+    look: { mode: d.mode === 'radial' ? 'radial' : 'freeform', power: num(d.power, 1.5, 7, 3.2), grain: num(d.grain, 0, 0.12, 0.05), blur: num(d.blur, 0, 0.5, 0),
+      bands: 0, distort, amount: num(d.amount, 0, 1, 0.5), scale: num(d.scale, 0, 1, 0.5), flow: !!d.animate && distort !== 'none' },
+  };
+}
+const AI_ERRORS = {
+  not_granted: 'Claude access was declined for this page.',
+  rate_limited: 'Too many requests right now. Wait a moment, then try again.',
+  invalid_json: 'Claude’s answer couldn’t be read. Try again.',
+  images_unavailable: 'Images can’t be sent here. Remove the image or try without it.',
+  image_rejected: 'That image couldn’t be sent. Try a JPG or PNG.',
+};
+async function generate(fr) {
+  if (!sampleFn || fr._ctl) return;
+  const a = aiOf(fr), text = a.text.trim(), withImage = !!a.img && sampleImages;
+  const set = nodeEls.get(fr.id), status = set && set.prompt.querySelector('.node-status');
+  if (!text && !a.img) { fr._msg = 'Write a prompt or add an image first.'; renderNodes(); return; }
+  fr._ctl = new AbortController(); fr._msg = ''; aiBusy++;
+  renderNodes();
+  if (status) status.textContent = 'Thinking…';
+  req({});
+  try {
+    const opts = { modelTier: 'default', signal: fr._ctl.signal };
+    if (withImage) opts.images = [dataUrlBlob(a.img)];
+    const scene = sceneFromAI(await sampleFn.json(aiBrief(fr, text, withImage), opts));
+    if (!scene) throw { code: 'invalid_json' };
+    const i = frames.indexOf(fr);
+    if (i < 0) return;
+    activateFrame(i, false);
+    if (scene.name && /^Frame \d+$/.test(fr.name)) { fr.name = scene.name; renderFrames(); }
+    applyScene(scene, `Generated${scene.name ? `: ${scene.name}` : ''}. ${MOD}+Z goes back.`);
+    fr._msg = `Done${scene.name ? `: ${scene.name}` : ''}. Edit the prompt and generate again to iterate.`;
+  } catch (e) {
+    fr._msg = e && e.code === 'cancelled' ? 'Stopped.' : AI_ERRORS[e && e.code] || 'Generation didn’t work this time. Try again.';
+  } finally {
+    fr._ctl = null; aiBusy--;
+    renderNodes(); req({});
+  }
+}
+async function initSample() {
+  sampleFn = await capUse('sample');
+  if (sampleFn && typeof sampleFn.limits === 'function') {
+    try { const l = await sampleFn.limits(); sampleImages = !!(l && l.images); } catch (e) { sampleImages = false; }
+  }
+  renderNodes();
+}
+
 const ICON_RENAME = '<svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13.5 6.5 4 4"/></svg>';
 const ICON_DELETE = '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg>';
 // The list is rebuilt only when frames are added, removed, renamed or resized, so clicks and double-clicks land on stable elements.
@@ -3252,6 +3580,8 @@ ovc.addEventListener('pointerdown', (e) => {
   if (e.pointerType === 'mouse' && e.button !== 0) return;
   e.preventDefault();
   hideTip();
+  const ic = iconAt(sx, sy);
+  if (ic) { if (ic.kind === 'dice') randomizeFrame(ic.i); else toggleAi(ic.i); return; }
   const lab = labelAt(sx, sy);
   if (lab >= 0) {
     const now = performance.now();
@@ -3376,7 +3706,9 @@ ovc.addEventListener('pointermove', (e) => {
   if (picking) { req({}); return; }
   if (live) { pencilMove(e, r); return; }
   if (!drag && !pen) {
-    const fi = frameAt(sx, sy), hl = labelAt(sx, sy), hf = hl >= 0 ? hl : fi !== active ? fi : -1;
+    const ic = iconAt(sx, sy), icKey = ic ? ic.kind + ic.i : '';
+    if (icKey !== hoverIcon) { hoverIcon = icKey; req({}); }
+    const fi = frameAt(sx, sy), hl = ic ? ic.i : labelAt(sx, sy), hf = hl >= 0 ? hl : fi !== active ? fi : -1;
     if (hf !== hoverFrame) { hoverFrame = hf; updateCursor(); req({}); }
     if (hf >= 0) { if (hover) { hover = null; updateCursor(); } return; }
   }
@@ -4240,7 +4572,7 @@ ui.newColor.addEventListener('input', () => {
 ui.keys.innerHTML = [
   ['V', 'Select and edit'], ['P', 'Pen'], ['B', 'Pencil'], ['S', 'Smudge'], ['H', 'Hide points and handles'], ['I', 'Pick a color from the reference'],
   ['Space drag', 'Pan the canvas'], [`${MOD} scroll`, 'Zoom'], ['Shift 1', 'Show all frames'], ['Shift 2', 'Zoom to the frame'], [`${MOD} 0`, 'Zoom to 100%'],
-  ['\\', 'Hide or show settings'], ['PgDn PgUp', 'Next or previous frame'], ['Enter', 'Finish a pen path'], [`${ALT} click`, 'Add an anchor to a path'], [`${ALT} drag`, 'Move one handle on its own'],
+  ['\\', 'Hide or show settings'], ['R', 'Random gradient in this frame'], ['PgDn PgUp', 'Next or previous frame'], ['Enter', 'Finish a pen path'], [`${ALT} click`, 'Add an anchor to a path'], [`${ALT} drag`, 'Move one handle on its own'],
   ['Shift drag', 'Snap to 15° (45° with the pen)'], ['Delete', 'Remove the selection'], [`${MOD} D`, 'Duplicate'], [`${MOD} Z`, 'Undo'], [`${MOD} E`, 'Export'], ['[ ]', 'Smudge brush size'],
 ].map(([k, v]) => `<dt>${k.split(' ').map((x) => `<kbd>${x}</kbd>`).join(' ')}</dt><dd>${v}</dd>`).join('');
 
@@ -4277,6 +4609,7 @@ window.addEventListener('keydown', (e) => {
     case 'b': case 'B': setTool('pencil'); break;
     case 's': case 'S': setTool('smudge'); break;
     case 'h': case 'H': toggleHandles(); break;
+    case 'r': case 'R': randomizeFrame(active); break;
     case '\\': setPanel(!panelOpen); break;
     case 'PageDown': case 'PageUp': e.preventDefault(); if (frames.length > 1) activateFrame((active + (e.key === 'PageDown' ? 1 : frames.length - 1)) % frames.length, true); break;
     case 'i': case 'I': if (refImg) setPicking(!picking); else toast('Add a reference image first, under Reference.'); break;
@@ -4907,6 +5240,8 @@ $$('.glass').forEach((el) => ro.observe(el));
 new ResizeObserver(() => resize()).observe(app);
 if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { measureGlass(); req({}); });
 initDownloads().catch(() => {});
+renderNodes();
+initSample().catch(() => {});
 setTimeout(() => { if (tool === 'select' && !tipsSeen.select && !coachKey) showCoach('select'); }, 900);
 })();
 </script>
