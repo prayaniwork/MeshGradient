@@ -9,8 +9,28 @@ const MAKE_PALETTE = ['#F0141E', '#FF8C1A', '#2F7DB0', '#FFF4E2', '#FF3D8B', '#2
 // Words that sit on light looks are set dark so they stay readable.
 const LIGHT = new Set(['Romantic.', 'Dreamy.']);
 const INVERT = new Set(['Elegant.']);
+// Stills of every finished look for the showreel, taken before recording starts.
+const SHOTS = [];
 
 module.exports = {
+  music: { file: 'assets/the-hip-hop.mp3', at: 'flood', drop: 2.6, gain: 0.9, fade: 2 },
+  // Steps through the ready-made frames with the UI hidden and keeps a still of each, then puts the app back.
+  async setup(d, page) {
+    await d.key('\\');
+    await d.key('h');
+    const r = d.frameRect(false), clip = { x: r.x + 3, y: r.y + 3, width: r.w - 6, height: r.h - 6 };
+    for (let i = 1; i < module.exports.seed.frames.length; i++) {
+      await d.key('PageDown');
+      await d.wait(650);
+      SHOTS.push('data:image/jpeg;base64,' + (await page.screenshot({ type: 'jpeg', quality: 86, clip })).toString('base64'));
+    }
+    await d.dm('prep', SHOTS);
+    await d.key('PageDown');
+    await d.key('\\');
+    await d.key('h');
+    await d.key('Shift+Digit2');
+    await d.wait(600);
+  },
   seed: {
     frames: [frame(LOOKS.make, { customPalette: MAKE_PALETTE }), frame(LOOKS.blocks), ...LOOKS.montage.map((L) => frame(L))],
     active: 0, panelOpen: true, newColor: '#F0141E', app: {},
@@ -33,6 +53,7 @@ module.exports = {
         await d.dm('ripple', x, y);
         await d.dm('fill', 'pw');
         await d.wait(420);
+        d.mark('flood');
         await d.dm('flood', x, y, 'Introducing', 'Meshdraw');
         await d.wait(1750);
       },
@@ -112,13 +133,13 @@ module.exports = {
       },
     },
     {
-      name: 'One canvas',
+      name: 'Showreel',
       speed: 1,
       run: async (d) => {
-        await d.key('Shift+Digit1');
         await d.dm('flash');
-        await d.dm('sup', 'Every mood. One canvas.', { size: 110, center: true, scrim: true });
-        await d.wait(1600);
+        await d.dm('clear', 'sup');
+        await d.dm('reel', SHOTS, 'Every mood. One canvas.');
+        await d.wait(2900);
       },
     },
     {
@@ -127,7 +148,7 @@ module.exports = {
       run: async (d) => {
         await d.key('Shift+Digit2');
         await d.dm('flash');
-        await d.dm('clear', 'sup');
+        await d.dm('clear', 'reel');
         await d.dm('cursor', true);
         await d.clickEl('#exportBtn');
         await d.dm('sup', 'Export it. Still or in motion.', { size: 96, top: '12vh' });

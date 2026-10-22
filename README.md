@@ -29,9 +29,9 @@ The file is written as a page fragment with no `<!doctype>` wrapper, so the host
 
 ## Demo film
 
-`demo/` records "What if a gradient had a personality?", a film of about 40 seconds. A kinetic serif cold open leads into the reveal: "Introducing Meshdraw". Then it shows making a gradient (point, handle, path, spread), melts four colour blocks into a gradient, and cuts through seven looks, each with a personality: Electric, Bold, Romantic, Elegant, Dreamy, Cinematic and Futuristic. It ends with export and the end card. Everything runs in the real app in headless Chrome. Supers, cursor and cuts are drawn in the page.
+`demo/` records "What if a gradient had a personality?", a film of about 40 seconds. A kinetic serif cold open leads into the reveal: "Introducing Meshdraw". Then it shows making a gradient (point, handle, path, spread), melts four colour blocks into a gradient, and cuts through seven looks, each with a personality: Electric, Bold, Romantic, Elegant, Dreamy, Cinematic and Futuristic. It moves through a perspective showreel of every look, and ends with export and the end card. Everything runs in the real app in headless Chrome. Supers, cursor and cuts are drawn in the page.
 
-- `demo/script.js`: the storyboard. Edit supers, order and speeds here. Add `music: { file: 'assets/track.mp3' }` for a soundtrack.
+- `demo/script.js`: the storyboard. Edit supers, order and speeds here. The soundtrack is set with `music: { file, at, drop }`. The track's drop (`drop`, in seconds) is lined up with a moment the storyboard marks (`at`). Audio files live in `demo/assets/` and are not committed.
 - `demo/looks.js`: the gradient looks used in the film.
 - `demo/overlay.js`: supers, title cards, flash cuts and the end card.
 

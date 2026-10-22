@@ -40,6 +40,16 @@
     .dm-sup.dark .t{color:#141218;text-shadow:0 .02em .3em rgba(255,255,255,.6)}
     .dm-flash{z-index:2147483620;background:#fff;animation:dmFlash .16s ease-out forwards}
     @keyframes dmFlash{from{opacity:.9}to{opacity:0}}
+    .dm-reel{z-index:2147483612;background:#fff;overflow:hidden}
+    .dm-reel .plane{position:absolute;left:50%;top:64%;display:flex;gap:30px;transform:translate(-50%,-50%) perspective(1500px) rotateX(40deg) rotateZ(-12deg);-webkit-mask-image:linear-gradient(to bottom,transparent 0,#000 30%);mask-image:linear-gradient(to bottom,transparent 0,#000 30%);animation:dmReelIn .6s cubic-bezier(.2,.9,.3,1) both}
+    @keyframes dmReelIn{from{opacity:0;transform:translate(-50%,-36%) perspective(1500px) rotateX(40deg) rotateZ(-12deg) scale(1.12)}}
+    .dm-reel .col{display:flex;flex-direction:column;gap:30px;animation:dmUp linear infinite}
+    @keyframes dmUp{to{transform:translateY(calc(-50% - 15px))}}
+    .dm-reel img{display:block;width:500px;height:281px;object-fit:cover;border-radius:22px;box-shadow:0 18px 40px rgba(20,18,40,.2)}
+    .dm-reel .fade{position:absolute;left:0;right:0;top:0;height:34vh;background:linear-gradient(#fff 55%,rgba(255,255,255,0))}
+    .dm-reel .type{position:absolute;top:9vh;left:0;right:0;text-align:center;font:400 128px/1 ${SERIF};color:#141218;letter-spacing:-.015em;white-space:pre}
+    .dm-reel .caret{display:inline-block;width:5px;height:.86em;background:#141218;margin-left:8px;vertical-align:-.06em;animation:dmBlink .9s steps(1) infinite}
+    @keyframes dmBlink{50%{opacity:0}}
     .dm-end{z-index:2147483630;display:grid;place-items:center;text-align:center;background:#fff;opacity:0;animation:dmFade .35s forwards}
     @keyframes dmFade{to{opacity:1}}
     .dm-end .l1{display:flex;justify-content:center;gap:.24em;font:italic 400 104px/1.05 ${SERIF};color:#141218}
@@ -117,6 +127,39 @@
       const t = document.createElement('div'); t.className = 't';
       build(t, text.split(' ').map((w) => (opt.italic ? { it: w } : w)), opt.step || 55);
       l.appendChild(t);
+    },
+    // Showreel: the frames drift upward on a tilted plane while the line types itself out above them.
+    // Decodes small copies of the stills ahead of time so the reel paints on its first frame.
+    async prep(images) {
+      this.shots = await Promise.all(images.map(async (src) => {
+        const im = new Image(); im.src = src; await im.decode();
+        const cv = document.createElement('canvas'); cv.width = 1000; cv.height = Math.round((1000 * im.naturalHeight) / im.naturalWidth);
+        cv.getContext('2d').drawImage(im, 0, 0, cv.width, cv.height);
+        const url = URL.createObjectURL(await new Promise((r) => cv.toBlob(r, 'image/jpeg', 0.9)));
+        const keep = new Image(); keep.src = url; await keep.decode(); (this.kept = this.kept || []).push(keep);
+        return url;
+      }));
+    },
+    reel(images, text) {
+      images = this.shots || images;
+      const r = layer('reel', 'dm-reel'), plane = document.createElement('div');
+      plane.className = 'plane';
+      for (let c = 0; c < 5; c++) {
+        const col = document.createElement('div');
+        col.className = 'col';
+        col.style.animationDuration = (5.2 + (c % 2) * 1.4 + c * 0.25) + 's';
+        col.style.marginTop = (c % 2 ? -160 : 0) + 'px';
+        const seq = [0, 1, 2, 3].map((k) => images[(c * 3 + k * 2) % images.length]);
+        for (const src of [...seq, ...seq]) { const im = document.createElement('img'); im.src = src; col.appendChild(im); }
+        plane.appendChild(col);
+      }
+      const t = document.createElement('div'), txt = document.createElement('span'), caret = document.createElement('i');
+      t.className = 'type'; caret.className = 'caret';
+      t.append(txt, caret);
+      const fade = document.createElement('div'); fade.className = 'fade';
+      r.append(plane, fade, t);
+      let i = 0;
+      setTimeout(() => { const timer = setInterval(() => { txt.textContent = text.slice(0, ++i); if (i >= text.length) clearInterval(timer); }, 52); }, 250);
     },
     flash() { const f = layer('flash', 'dm-flash'); setTimeout(() => f.remove(), 200); },
     end(l1, l2, name) {

@@ -14,7 +14,8 @@ const STORY = require('./script.js');
 const W = 1920, H = 1080, FPS = 30;
 const CHROME = process.env.CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const OUT = path.resolve(process.argv[2] || path.join(__dirname, 'meshdraw-demo.mp4'));
-// Optional soundtrack: music: { file, gain, fade } in script.js; the track is trimmed to the film and faded out.
+// Optional soundtrack: music: { file, gain, fade, at, drop } in script.js. If `at` names a d.mark() in the storyboard,
+// the track is shifted so its `drop` (seconds into the track) lands on that moment; it is cut to the film and faded out.
 const MUSIC = STORY.music ? { gain: 1, fade: 1.5, ...STORY.music, file: path.resolve(__dirname, STORY.music.file) } : null;
 const TMP = fs.mkdtempSync(path.join(require('os').tmpdir(), 'meshdraw-demo-'));
 
@@ -31,6 +32,7 @@ function serve() {
 }
 
 // ------------------------------------------------------------------ actions the storyboard can use
+const beats = {};
 function director(page, base) {
   let mx = W / 2, my = H / 2;
   const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
@@ -62,6 +64,7 @@ function director(page, base) {
   }
   return {
     wait, move, click, dblclick, frameRect, dm,
+    mark: (name) => { beats[name] = Date.now() / 1000; },
     at: (u, v) => { const r = frameRect(); return [r.x + u * r.w, r.y + v * r.h]; },
     jump: (x, y) => { mx = x; my = y; return page.mouse.move(x, y); },
     async clickEl(sel) { const b = await box(sel); await click(b.x + b.width / 2, b.y + b.height / 2); },
@@ -178,8 +181,12 @@ function director(page, base) {
   if (MUSIC) args.push('-i', MUSIC.file);
   args.push('-vf', `fps=${FPS},format=yuv420p`, '-c:v', 'libx264', '-preset', 'slow', '-crf', '17');
   if (MUSIC) {
+    const at = MUSIC.at && beats[MUSIC.at] != null ? toVideo(beats[MUSIC.at]) : null;
+    const shift = at == null ? 0 : at - (MUSIC.drop || 0), trim = Math.max(0, -shift), delay = Math.round(Math.max(0, shift) * 1000);
     const end = total.toFixed(3), fadeAt = Math.max(0, total - MUSIC.fade).toFixed(3);
-    args.push('-filter_complex', `[1:a]atrim=0:${end},volume=${MUSIC.gain},afade=t=out:st=${fadeAt}:d=${MUSIC.fade},apad[a]`, '-map', '0:v', '-map', '[a]', '-c:a', 'aac', '-b:a', '192k', '-shortest');
+    args.push('-filter_complex', `[1:a]atrim=start=${trim.toFixed(3)},asetpts=PTS-STARTPTS,adelay=${delay}:all=1,atrim=0:${end},volume=${MUSIC.gain},afade=t=out:st=${fadeAt}:d=${MUSIC.fade},apad[a]`,
+      '-map', '0:v', '-map', '[a]', '-c:a', 'aac', '-b:a', '192k', '-shortest');
+    if (at != null) console.log(`music: drop at ${(at).toFixed(2)}s (track ${shift >= 0 ? 'delayed' : 'trimmed'} ${Math.abs(shift).toFixed(2)}s)`);
   }
   args.push('-movflags', '+faststart', OUT);
   execFileSync('ffmpeg', args, { stdio: 'inherit' });
